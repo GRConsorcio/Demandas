@@ -751,7 +751,7 @@ const STATUS_LABEL={aberta:'Aberto','em_andamento':'Em andamento',aguardando:'Ag
 // do DemandasGR original (SUPER_ADMIN_DELETE_ABERTO), preservada tal como era.
 const SUPER_ADMIN_DELETE_ABERTA="rafaelsilvamessias9@gmail.com";
 
-let cu=null,cp=null,tickets=[],cFilter="todos",cView="dashboard",vTicketId=null,SETORES=[];
+let cu=null,cp=null,tickets=[],cFilter="todos",cView="dashboard",vTicketId=null,SETORES=[],USUARIO_OPERACIONAL=null;
 const uOrd={critico:0,alto:1,medio:2,baixo:3};
 const uClr={critico:"#f87171",alto:"#fb923c",medio:"#fbbf24",baixo:"#4ade80"};
 const isAdmin=()=>!!cp?.is_admin;
@@ -803,6 +803,10 @@ async function depoisDoLogin(email){
   cu={email};
   const { data:perfil } = await Q.from('solicitantes_perfil').select('*, setores(nome)').ilike('email',email).maybeSingle();
   cp=perfil || {email, nome:email, is_admin:false};
+  // Nem todo mundo que usa o Demandas tem login no Operacional - só quando tem
+  // (por e-mail) é que dá pra mover chamados pra Atividades Hoje da pessoa.
+  const { data:usuarioOp } = await Q.from('usuarios').select('*').ilike('email',email).maybeSingle();
+  USUARIO_OPERACIONAL = (usuarioOp && usuarioOp.ativo) ? usuarioOp : null;
   document.getElementById("login-loading").classList.remove("show");
   await carregarSetores();
   showApp();
@@ -983,7 +987,7 @@ window.submitTicket=async()=>{
     const { error } = await Q.from('solicitacoes').insert({
       setor_destino_id, setor_origem_id: cp?.setor_id||null, categoria, assunto, descricao, extra, privado,
       prioridade, prazo_horas: SLA_HOURS[urgency],
-      solicitante_id: cp?.id_operacional||null,
+      solicitante_id: USUARIO_OPERACIONAL?.id||null,
       solicitante_nome_externo: cp?.nome||cu.email, solicitante_email: cu.email,
       status:'aberta'
     });
@@ -1054,9 +1058,10 @@ function refreshModalData(t){
 
 window.changeStatus=async status=>{
   if(!vTicketId)return;
-  const from=tickets.find(x=>x.id===vTicketId)?.status||"aberta";
+  const ticketAtual=tickets.find(x=>x.id===vTicketId);
+  const from=ticketAtual?.status||"aberta";
   const data={status};
-  if(status==="concluida"){ data.concluido_em=new Date().toISOString(); data.resolvido_por_id=cp?.id_operacional||null; }
+  if(status==="concluida"){ data.concluido_em=new Date().toISOString(); data.resolvido_por_id=USUARIO_OPERACIONAL?.id||null; }
   else data.concluido_em=null;
   try{
     const { error } = await Q.from('solicitacoes').update(data).eq('id',vTicketId);
@@ -1066,10 +1071,31 @@ window.changeStatus=async status=>{
       tabela:'solicitacoes', registro_id:vTicketId, acao:'mudar_status',
       usuario_nome:cp?.nome||cu?.email||'–', detalhes:{de:from,para:status}
     });
+    if(['em_andamento','aguardando'].includes(status) && ticketAtual) await moverParaAtividadesOperacional(ticketAtual);
     showToast(status==="concluida"?"✅ Chamado marcado como resolvido!":"Status atualizado!");
     loadStatusHistory(vTicketId);
   }catch(e){showToast("Erro ao atualizar.",false);}
 };
+
+// ── Move o chamado pra "Minhas atividades de hoje" de quem mudou o status no
+// Operacional, quando a pessoa tem login lá (USUARIO_OPERACIONAL). Só vira a
+// atividade ATIVA (com timer rodando) se a pessoa estiver livre — o Operacional
+// só permite uma atividade ativa por vez, então forçar sempre trocaria o timer
+// de quem já está no meio de outra coisa sem ela pedir. Se já tiver algo
+// rodando, o chamado fica só registrado (não força nada) até ela finalizar.
+async function moverParaAtividadesOperacional(ticket){
+  if(!USUARIO_OPERACIONAL) return;
+  const { data: jaExiste } = await Q.from('execucoes').select('id').eq('solicitacao_id',ticket.id).maybeSingle();
+  if(jaExiste) return;
+  const { data: emAndamento } = await Q.from('execucoes').select('id').eq('usuario_id',USUARIO_OPERACIONAL.id).in('status',['em_andamento','pausado','devolvida']).maybeSingle();
+  if(emAndamento) return;
+  await Q.from('execucoes').insert({
+    usuario_id: USUARIO_OPERACIONAL.id, tipo:'extraordinario', solicitacao_id: ticket.id,
+    extra_o_que: ticket.assunto, extra_por_que: 'Chamado recebido pelo Demandas',
+    extra_quem_solicitou: ticket.solicitante_nome_externo||'—',
+    extra_setor_origem: ticket.origem?.nome||'—'
+  });
+}
 
 window.deleteTicket=async()=>{
   if(!vTicketId)return;
@@ -1354,7 +1380,7 @@ window.sendReply=async()=>{
   btn.disabled=true; ta.style.opacity="0.6";
   try{
     const { error } = await Q.from('solicitacoes_respostas').insert({
-      solicitacao_id:tid, autor_id:cp?.id_operacional||null, autor_nome:cp?.nome||cu.email, autor_email:cu.email, texto:text
+      solicitacao_id:tid, autor_id:USUARIO_OPERACIONAL?.id||null, autor_nome:cp?.nome||cu.email, autor_email:cu.email, texto:text
     });
     if(error) throw error;
     await Q.from('solicitacoes').update({ ultima_resposta_em:new Date().toISOString(), total_respostas:(tickets.find(x=>x.id===tid)?.total_respostas||0)+1 }).eq('id',tid);
