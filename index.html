@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Demandas · GR Consórcio</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -372,6 +373,11 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke-width="1.5" stroke-linecap="round"/></svg>
         Meu Perfil
       </button>
+      <div class="nav-sec" id="nav-sec-admin" style="display:none">Admin</div>
+      <button class="nav-item" id="nav-admin-btn" style="display:none" onclick="setView('admin',this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke-width="1.5"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke-width="1.5"/></svg>
+        Usuários
+      </button>
       <div class="sb-user">
         <div class="ucard">
           <div class="ucard-top">
@@ -475,6 +481,19 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
             </div>
           </div>
           <button class="btn-gold" onclick="openEditProfile()" style="max-width:220px;margin:0 auto;display:block;padding:0.6rem 1.5rem;font-size:0.85rem;">✏️ Editar Perfil</button>
+        </div>
+
+        <div id="view-admin" style="display:none">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:0.9rem">
+            <button class="btn-new" onclick="abrirNovoUsuarioDemandas()"><svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" stroke-width="3" stroke-linecap="round"/></svg><span>Novo usuário</span></button>
+          </div>
+          <div class="tw">
+            <div id="load-adm-usuarios" class="loading"><div class="spinner"></div>Carregando usuários...</div>
+            <table class="tt" id="adm-usuarios-table" style="display:none">
+              <thead><tr><th>Nome</th><th>E-mail</th><th>Setor</th><th>Cargo</th><th>Admin</th><th></th></tr></thead>
+              <tbody id="adm-usuarios-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </main>
@@ -675,6 +694,36 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
   </div>
 </div>
 
+<!-- MODAL USUÁRIO (admin) -->
+<div class="moverlay" id="modal-usuario-demandas">
+  <div class="modal" style="max-width:460px">
+    <div class="mhead"><div class="mhead-l"><span>🛠️</span><h3 id="ud-titulo">Usuário</h3></div><button class="mclose" onclick="closeModal('modal-usuario-demandas')">✕</button></div>
+    <div class="mbody">
+      <input type="hidden" id="ud-id">
+      <div class="fg2"><label>Nome completo *</label><input type="text" id="ud-nome"/></div>
+      <div class="fg2"><label>E-mail *</label><input type="email" id="ud-email"/></div>
+      <div class="frow2c">
+        <div class="fg2"><label>Setor</label><select id="ud-setor"><option value="">—</option></select></div>
+        <div class="fg2"><label>Cargo</label><input type="text" id="ud-cargo" placeholder="Ex: Analista, Gerente..."/></div>
+      </div>
+      <div class="fg2" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="ud-admin" style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer"/>
+        <label for="ud-admin" style="margin:0;cursor:pointer;user-select:none">É administrador do Demandas</label>
+      </div>
+      <div id="ud-origem-wrap" class="fg2">
+        <label>Login</label>
+        <select id="ud-origem"><option value="existente">Já existe (login do CRM ou Portal)</option><option value="novo">Criar novo login (CRM)</option></select>
+      </div>
+      <div id="ud-senha-wrap" class="fg2" style="display:none"><label>Senha temporária</label><input type="password" id="ud-senha" placeholder="Deixe em branco para gerar automaticamente"/></div>
+      <div id="ud-error" class="auth-err"></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn-cancel" onclick="closeModal('modal-usuario-demandas')">Cancelar</button>
+      <button class="btn-submit" onclick="salvarUsuarioDemandas()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Tela obrigatória: bloqueia o uso do app enquanto o usuário tiver curso(s)
      obrigatório(s) pendente(s) marcado(s) no Portal GR ("Cursos Obrigatórios",
      admin, app=demandas). Mesmo mecanismo usado pelo DemandasGR original. -->
@@ -781,6 +830,7 @@ window.doLogin=async()=>{
   document.getElementById("login-loading").classList.add("show");
   document.getElementById("login-btn").textContent="Entrando...";
 
+  let authSource='crm';
   let ok=await sbCrm.auth.signInWithPassword({email,password:pass});
   if(ok.error){
     let ok2=await sbPortal.auth.signInWithPassword({email,password:pass});
@@ -790,8 +840,10 @@ window.doLogin=async()=>{
       errEl.textContent="E-mail ou senha incorretos.";
       return;
     }
+    authSource='portal'; ok=ok2;
   }
-  await depoisDoLogin(email);
+  localStorage.setItem('demandas_auth_source',authSource);
+  await depoisDoLogin(email, ok.data.session.user.id, authSource);
 };
 window.doLogout=async()=>{
   await sbCrm.auth.signOut(); await sbPortal.auth.signOut();
@@ -799,9 +851,20 @@ window.doLogout=async()=>{
   location.reload();
 };
 
-async function depoisDoLogin(email){
+async function depoisDoLogin(email, authUserId, authSource){
   cu={email};
-  const { data:perfil } = await Q.from('solicitantes_perfil').select('*, setores(nome)').ilike('email',email).maybeSingle();
+  let { data:perfil } = await Q.from('solicitantes_perfil').select('*, setores(nome)').ilike('email',email).maybeSingle();
+  if(perfil){
+    // Mantém nome/setor/cargo/admin como estavam - só atualiza o vínculo de
+    // login se mudou (ex: pessoa trocou de senha/projeto de autenticação).
+    if(authUserId && (perfil.auth_user_id!==authUserId || perfil.auth_source!==authSource)){
+      await Q.from('solicitantes_perfil').update({auth_user_id:authUserId, auth_source:authSource}).eq('id',perfil.id);
+      perfil = {...perfil, auth_user_id:authUserId, auth_source:authSource};
+    }
+  } else if(authUserId){
+    const { data:novo } = await Q.from('solicitantes_perfil').insert({email, nome:email, auth_user_id:authUserId, auth_source:authSource, is_admin:false}).select('*, setores(nome)').single();
+    perfil = novo;
+  }
   cp=perfil || {email, nome:email, is_admin:false};
   // Nem todo mundo que usa o Demandas tem login no Operacional - só quando tem
   // (por e-mail) é que dá pra mover chamados pra Atividades Hoje da pessoa.
@@ -821,7 +884,7 @@ async function tentarSessaoSalva(){
   const cli=src==='crm'?sbCrm:sbPortal;
   const { data:{session} } = await cli.auth.getSession();
   if(!session) return false;
-  await depoisDoLogin(session.user.email);
+  await depoisDoLogin(session.user.email, session.user.id, src);
   return true;
 }
 
@@ -833,6 +896,7 @@ async function carregarSetores(){
   document.getElementById('new-dept').innerHTML=opts;
   document.getElementById('ep-dept').innerHTML=opts;
   document.getElementById('filter-dept').innerHTML=optsAll;
+  document.getElementById('ud-setor').innerHTML='<option value="">—</option>'+SETORES.map(s=>`<option value="${s.id}">${esc(s.nome)}</option>`).join('');
 }
 
 function showApp(){
@@ -851,6 +915,8 @@ function showApp(){
   document.getElementById("p-dept").textContent=dept;
   document.getElementById("p-cargo").textContent=cargo;
   if(cp?.criado_em)document.getElementById("p-since").textContent=fmt(cp.criado_em).split(" ")[0];
+  document.getElementById('nav-sec-admin').style.display = cp?.is_admin?'':'none';
+  document.getElementById('nav-admin-btn').style.display = cp?.is_admin?'':'none';
 }
 
 // ── TICKETS (realtime via Supabase, equivalente ao onSnapshot do Firestore) ──
@@ -957,12 +1023,14 @@ window.setView=(v,el)=>{
   cView=v;closeSidebar();
   document.querySelectorAll(".nav-item").forEach(b=>b.classList.remove("active"));
   if(el)el.classList.add("active");
-  const t={dashboard:["Dashboard","Visão geral dos chamados"],todos:["Todos os Chamados","Fila de prioridade geral"],meus:["Meus Chamados","Chamados abertos por mim"],perfil:["Meu Perfil","Informações da conta"]};
+  const t={dashboard:["Dashboard","Visão geral dos chamados"],todos:["Todos os Chamados","Fila de prioridade geral"],meus:["Meus Chamados","Chamados abertos por mim"],perfil:["Meu Perfil","Informações da conta"],admin:["Usuários","Gerenciar quem usa o Demandas"]};
   document.getElementById("view-title").textContent=t[v]?.[0]||v;
   document.getElementById("view-sub").textContent=t[v]?.[1]||"";
-  document.getElementById("view-tickets").style.display=v!=="perfil"?"block":"none";
+  document.getElementById("view-tickets").style.display=(v!=="perfil"&&v!=="admin")?"block":"none";
   document.getElementById("view-perfil").style.display=v==="perfil"?"block":"none";
-  if(v!=="perfil")renderTickets();
+  document.getElementById("view-admin").style.display=v==="admin"?"block":"none";
+  if(v==="admin")renderAdminUsuariosDemandas();
+  else if(v!=="perfil")renderTickets();
 };
 window.goToPerfil=()=>{const btns=document.querySelectorAll(".nav-item");let b=null;btns.forEach(x=>{if(x.textContent.trim().startsWith("Meu Perfil"))b=x;});setView("perfil",b);};
 window.toggleSidebar=()=>{document.getElementById("sidebar").classList.toggle("open");document.getElementById("sb-overlay").classList.toggle("open");};
@@ -1294,6 +1362,125 @@ window.saveProfile=async()=>{
     cp=data; showApp();
     closeModal("modal-edit-profile");showToast("Perfil atualizado!");
   }catch(e){ err.textContent="Erro: "+e.message; }
+};
+
+// ── ADMIN: GERENCIAR USUÁRIOS DO DEMANDAS (solicitantes_perfil) ─────────────
+// "Apagar" aqui só remove o cadastro/permissão do Demandas (solicitantes_perfil)
+// - NUNCA o login de verdade (CRM/Portal), que o Demandas não é dono. Mesmo
+// princípio do botão "Apagar" do admin do Operacional. "Criar novo login" e
+// "Redefinir senha" passam pelas mesmas Edge Functions do Operacional/CRM
+// (create-user / operacional-reset-senha), agora também aceitando um admin
+// identificado só por e-mail (caller_email), já que o Demandas não tem um id
+// de usuário próprio como o Operacional tem.
+let ADM_USUARIOS_DEMANDAS_CACHE=[];
+async function renderAdminUsuariosDemandas(){
+  document.getElementById('load-adm-usuarios').style.display='flex';
+  document.getElementById('adm-usuarios-table').style.display='none';
+  const { data, error } = await Q.from('solicitantes_perfil').select('*, setores(nome)').order('nome');
+  document.getElementById('load-adm-usuarios').style.display='none';
+  document.getElementById('adm-usuarios-table').style.display='table';
+  if(error){ showToast('Erro ao carregar usuários: '+error.message,false); return; }
+  ADM_USUARIOS_DEMANDAS_CACHE=data||[];
+  document.getElementById('adm-usuarios-body').innerHTML=(data||[]).map(u=>`<tr>
+    <td>${esc(u.nome)}</td>
+    <td style="font-size:0.78rem;color:var(--muted2)">${esc(u.email)}</td>
+    <td style="font-size:0.78rem;color:var(--muted2)">${esc(u.setores?.nome||'—')}</td>
+    <td style="font-size:0.78rem;color:var(--muted2)">${esc(u.cargo||'—')}</td>
+    <td>${u.is_admin?'<span class="badge badge-baixo">Sim</span>':'—'}</td>
+    <td style="white-space:nowrap">
+      <button class="btn-view" onclick="abrirEditarUsuarioDemandas('${u.id}')">Editar</button>
+      ${u.auth_user_id?` <button class="btn-view" onclick="redefinirSenhaDemandas('${u.id}','${(u.nome||'').replace(/'/g,"\\'")}')">Senha</button>`:''}
+      <button class="btn-delete" onclick="apagarUsuarioDemandas('${u.id}','${(u.nome||'').replace(/'/g,"\\'")}')">🗑</button>
+    </td>
+  </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">Nenhum usuário.</td></tr>';
+}
+window.abrirNovoUsuarioDemandas=()=>{
+  document.getElementById('ud-titulo').textContent='Novo usuário';
+  document.getElementById('ud-id').value='';
+  document.getElementById('ud-nome').value=''; document.getElementById('ud-email').value='';
+  document.getElementById('ud-email').disabled=false;
+  document.getElementById('ud-setor').value=''; document.getElementById('ud-cargo').value='';
+  document.getElementById('ud-admin').checked=false;
+  document.getElementById('ud-origem-wrap').style.display='block';
+  document.getElementById('ud-origem').value='existente';
+  document.getElementById('ud-origem').onchange=function(){ document.getElementById('ud-senha-wrap').style.display=this.value==='novo'?'block':'none'; };
+  document.getElementById('ud-senha-wrap').style.display='none';
+  document.getElementById('ud-error').textContent='';
+  document.getElementById('modal-usuario-demandas').classList.add('open');
+};
+window.abrirEditarUsuarioDemandas=id=>{
+  const u=ADM_USUARIOS_DEMANDAS_CACHE.find(x=>x.id===id);
+  if(!u)return;
+  document.getElementById('ud-titulo').textContent='Editar usuário';
+  document.getElementById('ud-id').value=u.id;
+  document.getElementById('ud-nome').value=u.nome||'';
+  document.getElementById('ud-email').value=u.email||'';
+  document.getElementById('ud-email').disabled=true;
+  document.getElementById('ud-setor').value=u.setor_id||'';
+  document.getElementById('ud-cargo').value=u.cargo||'';
+  document.getElementById('ud-admin').checked=!!u.is_admin;
+  document.getElementById('ud-origem-wrap').style.display='none';
+  document.getElementById('ud-senha-wrap').style.display='none';
+  document.getElementById('ud-error').textContent='';
+  document.getElementById('modal-usuario-demandas').classList.add('open');
+};
+window.salvarUsuarioDemandas=async()=>{
+  const id=document.getElementById('ud-id').value;
+  const nome=document.getElementById('ud-nome').value.trim();
+  const email=document.getElementById('ud-email').value.trim().toLowerCase();
+  const setor_id=document.getElementById('ud-setor').value||null;
+  const cargo=document.getElementById('ud-cargo').value.trim()||null;
+  const is_admin=document.getElementById('ud-admin').checked;
+  const err=document.getElementById('ud-error');
+  err.textContent='';
+  if(!nome||!email){ err.textContent='Nome e e-mail são obrigatórios.'; return; }
+
+  if(id){
+    const { error } = await Q.from('solicitantes_perfil').update({nome,setor_id,cargo,is_admin}).eq('id',id);
+    if(error){ err.textContent='Erro: '+error.message; return; }
+    closeModal('modal-usuario-demandas'); showToast('Usuário atualizado.'); renderAdminUsuariosDemandas();
+    return;
+  }
+
+  const origem=document.getElementById('ud-origem').value;
+  let auth_user_id=null, auth_source=null;
+  if(origem==='novo'){
+    const senha=document.getElementById('ud-senha').value.trim()||(Math.random().toString(36).slice(-10)+'A1!');
+    try{
+      const resp=await fetch(CRM_URL+'/functions/v1/create-user',{
+        method:'POST', headers:{'Content-Type':'application/json','apikey':CRM_KEY,'Authorization':'Bearer '+CRM_KEY},
+        body:JSON.stringify({name:nome, email, password:senha, role:'vendedor', caller_email:cu.email})
+      });
+      const json=await resp.json();
+      if(json.error) throw new Error(json.error);
+      auth_user_id=json.user_id||null; auth_source='crm';
+      showToast('Login criado. Senha temporária: '+senha);
+    }catch(e){ err.textContent='Erro ao criar login: '+e.message; return; }
+  }
+
+  const { error } = await Q.from('solicitantes_perfil').insert({nome,email,setor_id,cargo,is_admin,auth_user_id,auth_source});
+  if(error){ err.textContent='Erro: '+error.message; return; }
+  closeModal('modal-usuario-demandas'); showToast('Usuário salvo.'); renderAdminUsuariosDemandas();
+};
+window.redefinirSenhaDemandas=async(id,nome)=>{
+  const u=ADM_USUARIOS_DEMANDAS_CACHE.find(x=>x.id===id);
+  if(!u?.auth_user_id){ showToast('Este usuário ainda não tem login vinculado.',false); return; }
+  const senhaCustom=prompt(`Nova senha temporária para "${nome}" (deixe em branco para gerar uma automática):`);
+  if(senhaCustom===null) return;
+  const url=(u.auth_source==='portal'?PORTAL_URL:CRM_URL)+'/functions/v1/operacional-reset-senha';
+  try{
+    const resp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caller_email:cu.email, auth_user_id:u.auth_user_id, password:senhaCustom||''})});
+    const json=await resp.json();
+    if(json.error){ showToast('Erro: '+json.error,false); return; }
+    showToast(json.senha_temporaria?`Senha redefinida. Nova senha temporária: ${json.senha_temporaria}`:'Senha redefinida.');
+  }catch(e){ showToast('Erro ao redefinir senha: '+e.message,false); }
+};
+window.apagarUsuarioDemandas=async(id,nome)=>{
+  if(!confirm(`Remover "${nome}" da lista de usuários do Demandas? Isso NÃO apaga o login dela no CRM/Portal, só o cadastro e as permissões aqui no Demandas.`))return;
+  const { error } = await Q.from('solicitantes_perfil').delete().eq('id',id);
+  if(error){ showToast('Erro: '+error.message,false); return; }
+  showToast('Usuário removido do Demandas.');
+  renderAdminUsuariosDemandas();
 };
 
 // ── RESPOSTAS ─────────────────────────────────────────────────────────────────
