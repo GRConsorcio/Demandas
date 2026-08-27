@@ -1172,25 +1172,44 @@ async function moverParaAtividadesOperacional(ticket){
   });
 }
 
-// ── Quando o chamado é finalizado (concluida) SEM nunca ter passado por
-// em_andamento/aguardando (pulou direto de aberta pra concluida), nenhuma
-// atividade chega a ser criada em Operacional pela função acima — nada fica
-// no histórico de quem resolveu. Aqui só cobrimos esse caso específico:
-// se já existe uma atividade vinculada, não mexemos nela (a pessoa finaliza
-// a dela mesma, do jeito normal, dentro do Operacional — nunca forçamos o
-// timer de ninguém a fechar por aqui).
+// ── Quando o chamado é finalizado (concluida) no Demandas, a atividade
+// vinculada no Operacional (se houver) é finalizada TAMBÉM — pedido explícito
+// do usuário (2026-08-27): "todo chamado aberto no demandas que for finalizado
+// lá, finalize também no operacional a atividade". Cobre 3 casos:
+// 1) Nunca existiu atividade (pulou direto de aberta pra concluida) — cria
+//    uma já concluída, só pra ficar no histórico de quem era o responsável.
+// 2) Já estava concluída (a pessoa finalizou normalmente por lá antes) — nada
+//    a fazer.
+// 3) Ainda em_andamento/pausada/aguardando_validacao/devolvida — fecha
+//    (incluindo qualquer pausa em aberto, pra não deixar um registro de pausa
+//    pendurado sem "fim") e marca como concluída.
 async function registrarConclusaoOperacional(ticket){
   if(!USUARIO_OPERACIONAL) return;
-  const { data: jaExiste } = await Q.from('execucoes').select('id').eq('solicitacao_id',ticket.id).maybeSingle();
-  if(jaExiste) return;
+  const { data: exec } = await Q.from('execucoes').select('id,status,tempo_pausado_seg').eq('solicitacao_id',ticket.id).maybeSingle();
   const agora=new Date().toISOString();
-  await Q.from('execucoes').insert({
-    usuario_id: USUARIO_OPERACIONAL.id, tipo:'extraordinario', solicitacao_id: ticket.id,
-    extra_o_que: ticket.assunto, extra_por_que: 'Chamado recebido pelo Demandas',
-    extra_quem_solicitou: ticket.solicitante_nome_externo||'—',
-    extra_setor_origem: ticket.origem?.nome||'—',
-    inicio: ticket.criado_em||agora, fim: agora, status:'concluido'
-  });
+  if(!exec){
+    await Q.from('execucoes').insert({
+      usuario_id: USUARIO_OPERACIONAL.id, tipo:'extraordinario', solicitacao_id: ticket.id,
+      extra_o_que: ticket.assunto, extra_por_que: 'Chamado recebido pelo Demandas',
+      extra_quem_solicitou: ticket.solicitante_nome_externo||'—',
+      extra_setor_origem: ticket.origem?.nome||'—',
+      inicio: ticket.criado_em||agora, fim: agora, status:'concluido'
+    });
+    return;
+  }
+  if(exec.status==='concluido') return;
+  let tempoPausado=exec.tempo_pausado_seg||0;
+  if(exec.status==='pausado'){
+    const { data: pausaAberta } = await Q.from('pausas').select('id,inicio').eq('execucao_id',exec.id).is('fim',null).maybeSingle();
+    if(pausaAberta){
+      tempoPausado += Math.round((Date.now()-new Date(pausaAberta.inicio).getTime())/1000);
+      await Q.from('pausas').update({fim:agora}).eq('id',pausaAberta.id);
+    }
+  }
+  await Q.from('execucoes').update({
+    status:'concluido', fim:agora, tempo_pausado_seg:tempoPausado,
+    observacao:'Finalizada automaticamente — chamado concluído no Demandas.'
+  }).eq('id',exec.id);
 }
 
 // ── Auto-assume: se o setor de destino só tem UMA pessoa ativa vinculada ao
