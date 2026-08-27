@@ -1123,6 +1123,12 @@ function refreshModalData(t){
   if(hasResolved)document.getElementById("vd-resolved").textContent=fmt(t.concluido_em);
   document.getElementById("vd-stat").innerHTML=`<span class="badge badge-${t.status}">${esc(STATUS_LABEL[t.status]||t.status)}</span>`;
   document.querySelectorAll(".sbtn").forEach(b=>b.classList.toggle("active-s",b.getAttribute('onclick')===`changeStatus('${t.status}')`));
+  // BUGFIX (2026-08-27): "Responsável" ficava preso em "Ninguém assumiu ainda"
+  // mesmo depois do responsavel_id ser gravado certinho no banco (confirmado:
+  // mudar pra "Em andamento" atribui responsavel_id, mas o modal nunca
+  // atualizava esse campo específico) — faltava essa linha aqui.
+  const respEl=document.getElementById("vd-resp");
+  if(respEl) respEl.textContent=t.responsavel?.nome||"Ninguém assumiu ainda";
 }
 
 window.changeStatus=async status=>{
@@ -1149,6 +1155,17 @@ window.changeStatus=async status=>{
     if(status==='concluida' && ticketAtual) await registrarConclusaoOperacional(ticketAtual);
     showToast(status==="concluida"?"✅ Chamado marcado como resolvido!":"Status atualizado!");
     loadStatusHistory(vTicketId);
+    // BUGFIX (2026-08-27): sem isso, "Responsável" (e o próprio status) ficava
+    // desatualizado no modal e no cache local `tickets` até a próxima recarga
+    // completa da página — o dado no banco já estava certo, só a tela que não
+    // acompanhava (achado testando GR-00030: virou "Em andamento" de verdade,
+    // responsavel_id gravado, mas o modal continuava "Ninguém assumiu ainda").
+    const { data:tAtualizado } = await Q.from('solicitacoes').select('*, destino:setores!solicitacoes_setor_destino_id_fkey(nome), origem:setores!solicitacoes_setor_origem_id_fkey(nome), responsavel:usuarios!solicitacoes_responsavel_id_fkey(nome)').eq('id',vTicketId).maybeSingle();
+    if(tAtualizado){
+      const idx=tickets.findIndex(x=>x.id===vTicketId);
+      if(idx>-1) tickets[idx]=tAtualizado;
+      refreshModalData(tAtualizado);
+    }
   }catch(e){showToast("Erro ao atualizar.",false);}
 };
 
