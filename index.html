@@ -1131,6 +1131,11 @@ window.changeStatus=async status=>{
   const data={status};
   if(status==="concluida"){ data.concluido_em=new Date().toISOString(); data.resolvido_por_id=USUARIO_OPERACIONAL?.id||null; }
   else data.concluido_em=null;
+  // Quem move o chamado pra "em andamento" assume a demanda — mesma regra do
+  // botão "Assumir" no Operacional (só que agora vale pra quem muda o status
+  // por aqui também). Só atribui se a pessoa tiver login no Operacional; sem
+  // isso não sobrescreve um responsável já existente.
+  if(status==="em_andamento" && USUARIO_OPERACIONAL) data.responsavel_id=USUARIO_OPERACIONAL.id;
   try{
     const { error } = await Q.from('solicitacoes').update(data).eq('id',vTicketId);
     if(error){ showToast("Erro ao atualizar: "+error.message,false); return; }
