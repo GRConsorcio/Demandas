@@ -1052,14 +1052,15 @@ window.submitTicket=async()=>{
   if(!setor_destino_id||!categoria||!assunto){showToast("Preencha os campos obrigatórios.",false);return;}
   const prioridade=URG_TO_PRIORIDADE[urgency];
   try{
-    const { error } = await Q.from('solicitacoes').insert({
+    const { data:novoTicket, error } = await Q.from('solicitacoes').insert({
       setor_destino_id, setor_origem_id: cp?.setor_id||null, categoria, assunto, descricao, extra, privado,
       prioridade, prazo_horas: SLA_HOURS[urgency],
       solicitante_id: USUARIO_OPERACIONAL?.id||null,
       solicitante_nome_externo: cp?.nome||cu.email, solicitante_email: cu.email,
       status:'aberta'
-    });
+    }).select().single();
     if(error){ showToast("Erro ao abrir chamado: "+error.message,false); return; }
+    await autoAssumirSeSetorTemUmaPessoa(novoTicket, setor_destino_id);
     closeModal("modal-new");showToast(privado?"Chamado particular aberto — só você e o admin veem.":"Chamado aberto com sucesso!");
     ["new-title","new-desc","new-extra"].forEach(i=>document.getElementById(i).value="");
     document.getElementById("new-dept").value="";document.getElementById("new-cat").value="";document.getElementById("u-b").checked=true;
@@ -1152,17 +1153,17 @@ window.changeStatus=async status=>{
 };
 
 // ── Move o chamado pra "Minhas atividades de hoje" de quem mudou o status no
-// Operacional, quando a pessoa tem login lá (USUARIO_OPERACIONAL). Só vira a
-// atividade ATIVA (com timer rodando) se a pessoa estiver livre — o Operacional
-// só permite uma atividade ativa por vez, então forçar sempre trocaria o timer
-// de quem já está no meio de outra coisa sem ela pedir. Se já tiver algo
-// rodando, o chamado fica só registrado (não força nada) até ela finalizar.
+// Operacional, quando a pessoa tem login lá (USUARIO_OPERACIONAL). SEMPRE cria
+// a execução, contando o tempo desde agora — mesmo se a pessoa já estiver com
+// outra atividade em andamento. Entra em fila (2026-08-27, pedido explícito do
+// usuário: "não pausar nenhuma demanda, somente quando eu solicitar") — o
+// Operacional decide sozinho qual delas é a "atividade atual" (a mais antiga
+// ainda em andamento continua em primeiro, sem ser interrompida; a nova só
+// vira a principal na tela de Início quando a de agora for finalizada).
 async function moverParaAtividadesOperacional(ticket){
   if(!USUARIO_OPERACIONAL) return;
   const { data: jaExiste } = await Q.from('execucoes').select('id').eq('solicitacao_id',ticket.id).maybeSingle();
   if(jaExiste) return;
-  const { data: emAndamento } = await Q.from('execucoes').select('id').eq('usuario_id',USUARIO_OPERACIONAL.id).in('status',['em_andamento','pausado','devolvida']).maybeSingle();
-  if(emAndamento) return;
   await Q.from('execucoes').insert({
     usuario_id: USUARIO_OPERACIONAL.id, tipo:'extraordinario', solicitacao_id: ticket.id,
     extra_o_que: ticket.assunto, extra_por_que: 'Chamado recebido pelo Demandas',
@@ -1189,6 +1190,30 @@ async function registrarConclusaoOperacional(ticket){
     extra_quem_solicitou: ticket.solicitante_nome_externo||'—',
     extra_setor_origem: ticket.origem?.nome||'—',
     inicio: ticket.criado_em||agora, fim: agora, status:'concluido'
+  });
+}
+
+// ── Auto-assume: se o setor de destino só tem UMA pessoa ativa vinculada ao
+// Operacional, o chamado já nasce assumido por ela (sem precisar clicar em
+// "Assumir") e entra na fila dela automaticamente — mesma regra de sempre
+// (não pausa nem substitui o que ela já estiver fazendo), só que disparada
+// na CRIAÇÃO do chamado. Pedido do usuário (2026-08-27): "assim que aberto
+// um chamado pro meu departamento, ex comercial luiz só tem o luiz, preciso
+// que seja assumido imediatamente e fique na fila."
+async function autoAssumirSeSetorTemUmaPessoa(ticket, setorDestinoId){
+  const { data: pessoasSetor } = await Q.from('usuarios').select('id,nome').eq('setor_id',setorDestinoId).eq('ativo',true);
+  if(!pessoasSetor || pessoasSetor.length!==1) return;
+  const pessoa = pessoasSetor[0];
+  await Q.from('solicitacoes').update({responsavel_id:pessoa.id, status:'em_andamento'}).eq('id',ticket.id);
+  await Q.from('log_auditoria').insert({
+    tabela:'solicitacoes', registro_id:ticket.id, acao:'mudar_status',
+    usuario_nome:'Sistema (auto-assumido — único da equipe)', detalhes:{de:'aberta',para:'em_andamento'}
+  });
+  await Q.from('execucoes').insert({
+    usuario_id: pessoa.id, tipo:'extraordinario', solicitacao_id: ticket.id,
+    extra_o_que: ticket.assunto, extra_por_que: 'Chamado recebido pelo Demandas (auto-assumido)',
+    extra_quem_solicitou: ticket.solicitante_nome_externo||'—',
+    extra_setor_origem: cp?.setores?.nome||'—'
   });
 }
 
