@@ -1177,16 +1177,23 @@ window.changeStatus=async status=>{
 // Operacional decide sozinho qual delas é a "atividade atual" (a mais antiga
 // ainda em andamento continua em primeiro, sem ser interrompida; a nova só
 // vira a principal na tela de Início quando a de agora for finalizada).
+// Pedido do usuário (2026-08-31): mudar o status pra "em andamento"/"aguardando"
+// aqui no Demandas NÃO deve começar a contar tempo sozinho no Operacional — a
+// execução nasce PAUSADA (com uma pausa já aberta), só passa a contar quando a
+// pessoa clicar em "Retomar" lá de propósito.
 async function moverParaAtividadesOperacional(ticket){
   if(!USUARIO_OPERACIONAL) return;
   const { data: jaExiste } = await Q.from('execucoes').select('id').eq('solicitacao_id',ticket.id).maybeSingle();
   if(jaExiste) return;
-  await Q.from('execucoes').insert({
-    usuario_id: USUARIO_OPERACIONAL.id, tipo:'extraordinario', solicitacao_id: ticket.id,
+  const { data: novaExec, error: errExec } = await Q.from('execucoes').insert({
+    usuario_id: USUARIO_OPERACIONAL.id, tipo:'extraordinario', solicitacao_id: ticket.id, status:'pausado',
     extra_o_que: ticket.assunto, extra_por_que: 'Chamado recebido pelo Demandas',
     extra_quem_solicitou: ticket.solicitante_nome_externo||'—',
     extra_setor_origem: ticket.origem?.nome||'—'
-  });
+  }).select('id').single();
+  if(!errExec && novaExec){
+    await Q.from('pausas').insert({execucao_id:novaExec.id, motivo:'Outro', observacao:'Aguardando início — clique em Retomar pra começar a contar o tempo'});
+  }
 }
 
 // ── Quando o chamado é finalizado (concluida) no Demandas, a atividade
@@ -1245,12 +1252,17 @@ async function autoAssumirSeSetorTemUmaPessoa(ticket, setorDestinoId){
     tabela:'solicitacoes', registro_id:ticket.id, acao:'mudar_status',
     usuario_nome:'Sistema (auto-assumido — único da equipe)', detalhes:{de:'aberta',para:'em_andamento'}
   });
-  await Q.from('execucoes').insert({
-    usuario_id: pessoa.id, tipo:'extraordinario', solicitacao_id: ticket.id,
+  // Nasce PAUSADA igual moverParaAtividadesOperacional() — auto-assumir não
+  // deve começar a contar tempo sozinho, só quando a pessoa clicar "Retomar".
+  const { data: novaExec, error: errExec } = await Q.from('execucoes').insert({
+    usuario_id: pessoa.id, tipo:'extraordinario', solicitacao_id: ticket.id, status:'pausado',
     extra_o_que: ticket.assunto, extra_por_que: 'Chamado recebido pelo Demandas (auto-assumido)',
     extra_quem_solicitou: ticket.solicitante_nome_externo||'—',
     extra_setor_origem: cp?.setores?.nome||'—'
-  });
+  }).select('id').single();
+  if(!errExec && novaExec){
+    await Q.from('pausas').insert({execucao_id:novaExec.id, motivo:'Outro', observacao:'Aguardando início — clique em Retomar pra começar a contar o tempo'});
+  }
 }
 
 window.deleteTicket=async()=>{
