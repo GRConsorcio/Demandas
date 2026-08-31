@@ -1520,6 +1520,18 @@ window.abrirEditarUsuarioDemandas=id=>{
   document.getElementById('ud-error').textContent='';
   document.getElementById('modal-usuario-demandas').classList.add('open');
 };
+// BUGFIX: a opção "já tem login" (origem==='existente', o padrão) nunca
+// realmente procurava esse login — auth_user_id ficava sempre null, então o
+// botão "Senha" nunca aparecia pra ninguém adicionado por esse caminho (a
+// maioria dos usuários do Demandas, já que a maior parte já loga no CRM/Portal
+// por outro app). Procura por e-mail nos dois projetos antes de salvar.
+async function _buscarLoginExistente(email){
+  const { data: crmUser } = await sbCrm.from('crm_users').select('user_id').ilike('email',email).maybeSingle();
+  if(crmUser?.user_id) return { auth_user_id:crmUser.user_id, auth_source:'crm' };
+  const { data: portalUser } = await sbPortal.from('portal_users').select('user_id').ilike('email',email).maybeSingle();
+  if(portalUser?.user_id) return { auth_user_id:portalUser.user_id, auth_source:'portal' };
+  return null;
+}
 window.salvarUsuarioDemandas=async()=>{
   const id=document.getElementById('ud-id').value;
   const nome=document.getElementById('ud-nome').value.trim();
@@ -1532,7 +1544,15 @@ window.salvarUsuarioDemandas=async()=>{
   if(!nome||!email){ err.textContent='Nome e e-mail são obrigatórios.'; return; }
 
   if(id){
-    const { error } = await Q.from('solicitantes_perfil').update({nome,setor_id,cargo,is_admin}).eq('id',id);
+    const payload={nome,setor_id,cargo,is_admin};
+    // Auto-cura: se esse usuário ainda não tem login vinculado, tenta achar
+    // de novo a cada edição — cobre quem foi cadastrado antes desse fix.
+    const atual=ADM_USUARIOS_DEMANDAS_CACHE.find(x=>x.id===id);
+    if(!atual?.auth_user_id){
+      const achado=await _buscarLoginExistente(email);
+      if(achado){ payload.auth_user_id=achado.auth_user_id; payload.auth_source=achado.auth_source; }
+    }
+    const { error } = await Q.from('solicitantes_perfil').update(payload).eq('id',id);
     if(error){ err.textContent='Erro: '+error.message; return; }
     closeModal('modal-usuario-demandas'); showToast('Usuário atualizado.'); renderAdminUsuariosDemandas();
     return;
@@ -1552,6 +1572,9 @@ window.salvarUsuarioDemandas=async()=>{
       auth_user_id=json.user_id||null; auth_source='crm';
       showToast('Login criado. Senha temporária: '+senha);
     }catch(e){ err.textContent='Erro ao criar login: '+e.message; return; }
+  } else {
+    const achado=await _buscarLoginExistente(email);
+    if(achado){ auth_user_id=achado.auth_user_id; auth_source=achado.auth_source; }
   }
 
   const { error } = await Q.from('solicitantes_perfil').insert({nome,email,setor_id,cargo,is_admin,auth_user_id,auth_source});
