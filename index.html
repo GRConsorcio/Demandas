@@ -1200,11 +1200,25 @@ async function moverParaAtividadesOperacional(ticket){
 // 3) Ainda em_andamento/pausada/aguardando_validacao/devolvida — fecha
 //    (incluindo qualquer pausa em aberto, pra não deixar um registro de pausa
 //    pendurado sem "fim") e marca como concluída.
+// BUGFIX (2026-09-02): a função inteira só rodava if(USUARIO_OPERACIONAL) —
+// mas USUARIO_OPERACIONAL só existe quando o e-mail de LOGIN no Demandas
+// bate com produtividade.usuarios.email de quem tá fechando o chamado. Achado
+// no caso do Deivid e da Larissa: os dois têm mais de um login no Demandas
+// (solicitantes_perfil), e o e-mail que normalmente usam pra entrar (hotmail/
+// gmail pessoal) é DIFERENTE do e-mail cadastrado hoje em produtividade.usuarios
+// (grconsorcio.com.br) — então USUARIO_OPERACIONAL vinha null na sessão deles,
+// e a função saía sem fazer nada, mesmo com a atividade já existindo e correta
+// no Operacional (criada antes por outro caminho, ex: auto-assumir, que resolve
+// o usuário certo por outro meio, não pela sessão de quem tá logado agora).
+// Resultado: chamado marcado "Resolvido" no Demandas, mas a atividade ficava
+// em_andamento pra sempre no Operacional. USUARIO_OPERACIONAL só é realmente
+// necessário no caminho "criar do zero" (não existe execução ainda) — fechar
+// uma que já existe não depende de quem está logado agora, só do id dela.
 async function registrarConclusaoOperacional(ticket){
-  if(!USUARIO_OPERACIONAL) return;
   const { data: exec } = await Q.from('execucoes').select('id,status,tempo_pausado_seg').eq('solicitacao_id',ticket.id).maybeSingle();
   const agora=new Date().toISOString();
   if(!exec){
+    if(!USUARIO_OPERACIONAL) return; // criar do zero exige saber de quem é a execução
     await Q.from('execucoes').insert({
       usuario_id: USUARIO_OPERACIONAL.id, tipo:'extraordinario', solicitacao_id: ticket.id,
       extra_o_que: ticket.assunto, extra_por_que: 'Chamado recebido pelo Demandas',
