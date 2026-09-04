@@ -748,7 +748,7 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
 // Mesmo padrão de login dual (CRM -> Portal) do Operacional/CRM/Portal GR.
 // ═══════════════════════════════════════════════════════════════════════════
 const CRM_URL='https://prquggwhjcvenzuziaox.supabase.co';
-const CRM_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBycXVnZ3doamN2ZW56dXppYW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMTUzMDUsImV4cCI6MjA5Mzc5MTMwNX0.vjbVhGIUowS6AGE1Uf5uDutCMI193mhgra3GSwlqMec';
+const CRM_KEY='sb_publishable_YcjSMFQoaBa5mHUtqrPCPQ_2SZmJ5aF';
 const PORTAL_URL='https://defwtvwmxntoliuwzjnf.supabase.co';
 const PORTAL_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlZnd0dndteG50b2xpdXd6am5mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTUyMzEsImV4cCI6MjA5NjU5MTIzMX0.K6Y-ssyM9Kz_Jj4aJf4CyhfaDfzARgnpD7DrnnZzUeQ';
 const { createClient } = supabase;
@@ -861,11 +861,22 @@ async function depoisDoLogin(email, authUserId, authSource){
       await Q.from('solicitantes_perfil').update({auth_user_id:authUserId, auth_source:authSource}).eq('id',perfil.id);
       perfil = {...perfil, auth_user_id:authUserId, auth_source:authSource};
     }
-  } else if(authUserId){
-    const { data:novo } = await Q.from('solicitantes_perfil').insert({email, nome:email, auth_user_id:authUserId, auth_source:authSource, is_admin:false}).select('*, setores(nome)').single();
-    perfil = novo;
+  } else {
+    // SEGURANÇA (2026-09-04, pedido urgente do usuário): antes, qualquer login
+    // válido do CRM/Portal sem cadastro prévio no Demandas ganhava acesso na
+    // hora (criava um solicitantes_perfil aqui mesmo, is_admin:false) — na
+    // prática, qualquer vendedor com a própria senha do CRM entrava no
+    // Demandas sem nunca ter sido cadastrado por um admin. Agora exige
+    // cadastro prévio feito por um admin (Administração > Usuários) — sem
+    // isso, login é negado e a sessão é encerrada.
+    document.getElementById("login-loading").classList.remove("show");
+    document.getElementById("login-btn").textContent="Entrar";
+    document.getElementById("auth-error").textContent="Você não tem acesso ao Sistema de Chamados. Peça a um administrador para te cadastrar em Administração > Usuários.";
+    await sbCrm.auth.signOut(); await sbPortal.auth.signOut();
+    localStorage.removeItem('demandas_auth_source');
+    return;
   }
-  cp=perfil || {email, nome:email, is_admin:false};
+  cp=perfil;
   // Nem todo mundo que usa o Demandas tem login no Operacional - só quando tem
   // (por e-mail) é que dá pra mover chamados pra Atividades Hoje da pessoa.
   const { data:usuarioOp } = await Q.from('usuarios').select('*').ilike('email',email).maybeSingle();
