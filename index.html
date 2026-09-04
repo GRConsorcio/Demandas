@@ -710,11 +710,7 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
         <input type="checkbox" id="ud-admin" style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer"/>
         <label for="ud-admin" style="margin:0;cursor:pointer;user-select:none">É administrador do Demandas</label>
       </div>
-      <div id="ud-origem-wrap" class="fg2">
-        <label>Login</label>
-        <select id="ud-origem"><option value="existente">Já existe (login do CRM ou Portal)</option><option value="novo">Criar novo login (CRM)</option></select>
-      </div>
-      <div id="ud-senha-wrap" class="fg2" style="display:none"><label>Senha temporária</label><input type="password" id="ud-senha" placeholder="Deixe em branco para gerar automaticamente"/></div>
+      <div id="ud-senha-wrap" class="fg2"><label id="ud-senha-label">Senha</label><input type="password" id="ud-senha" placeholder="Mínimo 6 caracteres"/></div>
       <div id="ud-error" class="auth-err"></div>
     </div>
     <div class="mfoot">
@@ -753,7 +749,6 @@ const PORTAL_URL='https://defwtvwmxntoliuwzjnf.supabase.co';
 const PORTAL_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlZnd0dndteG50b2xpdXd6am5mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTUyMzEsImV4cCI6MjA5NjU5MTIzMX0.K6Y-ssyM9Kz_Jj4aJf4CyhfaDfzARgnpD7DrnnZzUeQ';
 const { createClient } = supabase;
 const sbCrm = createClient(CRM_URL, CRM_KEY);
-const sbPortal = createClient(PORTAL_URL, PORTAL_KEY);
 const Q = sbCrm.schema('produtividade');
 const ANEXOS_BUCKET = 'produtividade-anexos';
 
@@ -804,6 +799,7 @@ let cu=null,cp=null,tickets=[],cFilter="todos",cView="dashboard",vTicketId=null,
 const uOrd={critico:0,alto:1,medio:2,baixo:3};
 const uClr={critico:"#f87171",alto:"#fb923c",medio:"#fbbf24",baixo:"#4ade80"};
 const isAdmin=()=>!!cp?.is_admin;
+// (cp agora vem de demandas_usuarios/demandas_login — mesmo campo is_admin de antes)
 // Chamado "particular": visível só pra quem abriu e pro admin — igual DemandasGR.
 const canSeeTicket=t=>!t.privado||(t.solicitante_email||'').toLowerCase()===(cu?.email||'').toLowerCase()||isAdmin();
 
@@ -820,7 +816,12 @@ const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):"";
 const ini=n=>(n||"?").split(" ").slice(0,2).map(w=>w[0]).join("").toUpperCase();
 const numFmt=n=>'GR-'+String(n||0).padStart(5,'0');
 
-// ── AUTH (dual CRM -> Portal, mesmo padrão do Operacional) ──────────────────
+// ── AUTH PRÓPRIO do Demandas (tabela demandas_usuarios + RPCs) ──────────────
+// Separado de propósito do CRM/Portal (2026-09-04, pedido urgente do usuário
+// após achar que qualquer login válido do CRM/Portal ganhava acesso automático
+// ao Demandas). Mesmo padrão já usado no Análises: senha própria, cadastro só
+// por um admin daqui (sem autocadastro), sessão local guardada em
+// localStorage (sem depender de auth.users do CRM/Portal).
 window.doLogin=async()=>{
   const email=document.getElementById("login-email").value.trim();
   const pass=document.getElementById("login-password").value;
@@ -829,57 +830,30 @@ window.doLogin=async()=>{
   if(!email||!pass){errEl.textContent="Preencha e-mail e senha.";return;}
   document.getElementById("login-loading").classList.add("show");
   document.getElementById("login-btn").textContent="Entrando...";
-
-  let authSource='crm';
-  let ok=await sbCrm.auth.signInWithPassword({email,password:pass});
-  if(ok.error){
-    let ok2=await sbPortal.auth.signInWithPassword({email,password:pass});
-    if(ok2.error){
-      document.getElementById("login-loading").classList.remove("show");
-      document.getElementById("login-btn").textContent="Entrar";
-      errEl.textContent="E-mail ou senha incorretos.";
-      return;
-    }
-    authSource='portal'; ok=ok2;
+  try{
+    const { data, error } = await sbCrm.rpc('demandas_login',{p_email:email,p_senha:pass});
+    if(error) throw error;
+    const row=Array.isArray(data)?data[0]:data;
+    if(!row) throw new Error('E-mail ou senha incorretos.');
+    localStorage.setItem('demandas_sessao', JSON.stringify(row));
+    await iniciarSessao(row);
+  }catch(e){
+    document.getElementById("login-loading").classList.remove("show");
+    document.getElementById("login-btn").textContent="Entrar";
+    errEl.textContent=e.message||"Erro ao entrar.";
   }
-  localStorage.setItem('demandas_auth_source',authSource);
-  await depoisDoLogin(email, ok.data.session.user.id, authSource);
 };
-window.doLogout=async()=>{
-  await sbCrm.auth.signOut(); await sbPortal.auth.signOut();
-  localStorage.removeItem('demandas_auth_source');
+window.doLogout=()=>{
+  localStorage.removeItem('demandas_sessao');
   location.reload();
 };
 
-async function depoisDoLogin(email, authUserId, authSource){
-  cu={email};
-  let { data:perfil } = await Q.from('solicitantes_perfil').select('*, setores(nome)').ilike('email',email).maybeSingle();
-  if(perfil){
-    // Mantém nome/setor/cargo/admin como estavam - só atualiza o vínculo de
-    // login se mudou (ex: pessoa trocou de senha/projeto de autenticação).
-    if(authUserId && (perfil.auth_user_id!==authUserId || perfil.auth_source!==authSource)){
-      await Q.from('solicitantes_perfil').update({auth_user_id:authUserId, auth_source:authSource}).eq('id',perfil.id);
-      perfil = {...perfil, auth_user_id:authUserId, auth_source:authSource};
-    }
-  } else {
-    // SEGURANÇA (2026-09-04, pedido urgente do usuário): antes, qualquer login
-    // válido do CRM/Portal sem cadastro prévio no Demandas ganhava acesso na
-    // hora (criava um solicitantes_perfil aqui mesmo, is_admin:false) — na
-    // prática, qualquer vendedor com a própria senha do CRM entrava no
-    // Demandas sem nunca ter sido cadastrado por um admin. Agora exige
-    // cadastro prévio feito por um admin (Administração > Usuários) — sem
-    // isso, login é negado e a sessão é encerrada.
-    document.getElementById("login-loading").classList.remove("show");
-    document.getElementById("login-btn").textContent="Entrar";
-    document.getElementById("auth-error").textContent="Você não tem acesso ao Sistema de Chamados. Peça a um administrador para te cadastrar em Administração > Usuários.";
-    await sbCrm.auth.signOut(); await sbPortal.auth.signOut();
-    localStorage.removeItem('demandas_auth_source');
-    return;
-  }
-  cp=perfil;
+async function iniciarSessao(row){
+  cu={email:row.email};
+  cp=row;
   // Nem todo mundo que usa o Demandas tem login no Operacional - só quando tem
   // (por e-mail) é que dá pra mover chamados pra Atividades Hoje da pessoa.
-  const { data:usuarioOp } = await Q.from('usuarios').select('*').ilike('email',email).maybeSingle();
+  const { data:usuarioOp } = await Q.from('usuarios').select('*').ilike('email',row.email).maybeSingle();
   USUARIO_OPERACIONAL = (usuarioOp && usuarioOp.ativo) ? usuarioOp : null;
   document.getElementById("login-loading").classList.remove("show");
   await carregarSetores();
@@ -889,13 +863,16 @@ async function depoisDoLogin(email, authUserId, authSource){
   setTimeout(abrirTicketDaUrl,900);
 }
 
+// Revalida contra o banco (via a view pública, sem senha) antes de liberar a
+// tela — uma conta desativada por um admin não continua "logada" só porque o
+// navegador guardou a sessão antiga.
 async function tentarSessaoSalva(){
-  const src=localStorage.getItem('demandas_auth_source');
-  if(!src) return false;
-  const cli=src==='crm'?sbCrm:sbPortal;
-  const { data:{session} } = await cli.auth.getSession();
-  if(!session) return false;
-  await depoisDoLogin(session.user.email, session.user.id, src);
+  const saved=localStorage.getItem('demandas_sessao');
+  if(!saved) return false;
+  let row; try{ row=JSON.parse(saved); }catch(e){ localStorage.removeItem('demandas_sessao'); return false; }
+  const { data:atual } = await sbCrm.from('demandas_usuarios_publica').select('*').eq('id',row.id).maybeSingle();
+  if(!atual || !atual.ativo){ localStorage.removeItem('demandas_sessao'); return false; }
+  await iniciarSessao(atual);
   return true;
 }
 
@@ -915,7 +892,7 @@ function showApp(){
   document.getElementById("app-screen").style.display="block";
   requestNotifPermission();
   initSoundButton();
-  const name=cp?.nome||cu.email, dept=cp?.setores?.nome||"–", cargo=cp?.cargo||"–", i=ini(name);
+  const name=cp?.nome||cu.email, dept=SETORES.find(s=>s.id===cp?.setor_id)?.nome||"–", cargo=cp?.cargo||"–", i=ini(name);
   ["sb-av","tb-av","p-av"].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=i;});
   document.getElementById("sb-name").textContent=name;
   document.getElementById("sb-dept").textContent=dept;
@@ -1279,7 +1256,7 @@ async function autoAssumirSeSetorTemUmaPessoa(ticket, setorDestinoId){
     usuario_id: pessoa.id, tipo:'extraordinario', solicitacao_id: ticket.id, status:'pausado',
     extra_o_que: ticket.assunto, extra_por_que: 'Chamado recebido pelo Demandas (auto-assumido)',
     extra_quem_solicitou: ticket.solicitante_nome_externo||'—',
-    extra_setor_origem: cp?.setores?.nome||'—'
+    extra_setor_origem: SETORES.find(s=>s.id===cp?.setor_id)?.nome||'—'
   }).select('id').single();
   if(!errExec && novaExec){
     await Q.from('pausas').insert({execucao_id:novaExec.id, motivo:'Outro', observacao:'Aguardando início — clique em Retomar pra começar a contar o tempo'});
@@ -1476,41 +1453,38 @@ window.saveProfile=async()=>{
   err.textContent="";
   if(!nome||!setor_id){err.textContent="Nome e departamento obrigatórios.";return;}
   try{
-    const { data, error } = await Q.from('solicitantes_perfil').upsert({
-      id: cp?.id, email: cu.email, nome, setor_id, cargo, is_admin: cp?.is_admin||false
-    }, {onConflict:'email'}).select('*, setores(nome)').single();
+    const { data, error } = await sbCrm.rpc('demandas_alterar_proprio',{p_user_id:cp.id, p_nome:nome, p_setor_id:setor_id, p_cargo:cargo});
     if(error){ err.textContent="Erro: "+error.message; return; }
-    cp=data; showApp();
+    const row=Array.isArray(data)?data[0]:data;
+    cp=row; localStorage.setItem('demandas_sessao', JSON.stringify(row)); showApp();
     closeModal("modal-edit-profile");showToast("Perfil atualizado!");
   }catch(e){ err.textContent="Erro: "+e.message; }
 };
 
-// ── ADMIN: GERENCIAR USUÁRIOS DO DEMANDAS (solicitantes_perfil) ─────────────
-// "Apagar" aqui só remove o cadastro/permissão do Demandas (solicitantes_perfil)
-// - NUNCA o login de verdade (CRM/Portal), que o Demandas não é dono. Mesmo
-// princípio do botão "Apagar" do admin do Operacional. "Criar novo login" e
-// "Redefinir senha" passam pelas mesmas Edge Functions do Operacional/CRM
-// (create-user / operacional-reset-senha), agora também aceitando um admin
-// identificado só por e-mail (caller_email), já que o Demandas não tem um id
-// de usuário próprio como o Operacional tem.
+// ── ADMIN: GERENCIAR USUÁRIOS DO DEMANDAS (demandas_usuarios, login próprio) ──
+// Login separado do CRM/Portal (2026-09-04) — criar/editar/apagar/resetar senha
+// tudo por RPC própria (demandas_admin_*), sem passar mais pelas Edge
+// Functions do CRM nem depender de auth.users. "Apagar" aqui apaga a conta do
+// Demandas de verdade agora (não é mais só um vínculo) — o login era próprio
+// desde o cadastro, não existe mais "conta de outro app" pra preservar.
 let ADM_USUARIOS_DEMANDAS_CACHE=[];
 async function renderAdminUsuariosDemandas(){
   document.getElementById('load-adm-usuarios').style.display='flex';
   document.getElementById('adm-usuarios-table').style.display='none';
-  const { data, error } = await Q.from('solicitantes_perfil').select('*, setores(nome)').order('nome');
+  const { data, error } = await sbCrm.from('demandas_usuarios_publica').select('*').order('nome');
   document.getElementById('load-adm-usuarios').style.display='none';
   document.getElementById('adm-usuarios-table').style.display='table';
   if(error){ showToast('Erro ao carregar usuários: '+error.message,false); return; }
   ADM_USUARIOS_DEMANDAS_CACHE=data||[];
   document.getElementById('adm-usuarios-body').innerHTML=(data||[]).map(u=>`<tr>
-    <td>${esc(u.nome)}</td>
+    <td>${esc(u.nome)} ${u.ativo?'':'<span class="badge" style="background:rgba(248,113,113,0.15);color:#f87171">Desativado</span>'}</td>
     <td style="font-size:0.78rem;color:var(--muted2)">${esc(u.email)}</td>
-    <td style="font-size:0.78rem;color:var(--muted2)">${esc(u.setores?.nome||'—')}</td>
+    <td style="font-size:0.78rem;color:var(--muted2)">${esc(SETORES.find(s=>s.id===u.setor_id)?.nome||'—')}</td>
     <td style="font-size:0.78rem;color:var(--muted2)">${esc(u.cargo||'—')}</td>
     <td>${u.is_admin?'<span class="badge badge-baixo">Sim</span>':'—'}</td>
     <td style="white-space:nowrap">
       <button class="btn-view" onclick="abrirEditarUsuarioDemandas('${u.id}')">Editar</button>
-      ${u.auth_user_id?` <button class="btn-view" onclick="redefinirSenhaDemandas('${u.id}','${(u.nome||'').replace(/'/g,"\\'")}')">Senha</button>`:''}
+      <button class="btn-view" onclick="toggleAtivoUsuarioDemandas('${u.id}',${u.ativo})">${u.ativo?'Desativar':'Ativar'}</button>
       <button class="btn-delete" onclick="apagarUsuarioDemandas('${u.id}','${(u.nome||'').replace(/'/g,"\\'")}')">🗑</button>
     </td>
   </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">Nenhum usuário.</td></tr>';
@@ -1522,10 +1496,9 @@ window.abrirNovoUsuarioDemandas=()=>{
   document.getElementById('ud-email').disabled=false;
   document.getElementById('ud-setor').value=''; document.getElementById('ud-cargo').value='';
   document.getElementById('ud-admin').checked=false;
-  document.getElementById('ud-origem-wrap').style.display='block';
-  document.getElementById('ud-origem').value='existente';
-  document.getElementById('ud-origem').onchange=function(){ document.getElementById('ud-senha-wrap').style.display=this.value==='novo'?'block':'none'; };
-  document.getElementById('ud-senha-wrap').style.display='none';
+  document.getElementById('ud-senha-label').textContent='Senha';
+  document.getElementById('ud-senha').value='';
+  document.getElementById('ud-senha').placeholder='Mínimo 6 caracteres';
   document.getElementById('ud-error').textContent='';
   document.getElementById('modal-usuario-demandas').classList.add('open');
 };
@@ -1536,27 +1509,16 @@ window.abrirEditarUsuarioDemandas=id=>{
   document.getElementById('ud-id').value=u.id;
   document.getElementById('ud-nome').value=u.nome||'';
   document.getElementById('ud-email').value=u.email||'';
-  document.getElementById('ud-email').disabled=true;
+  document.getElementById('ud-email').disabled=false;
   document.getElementById('ud-setor').value=u.setor_id||'';
   document.getElementById('ud-cargo').value=u.cargo||'';
   document.getElementById('ud-admin').checked=!!u.is_admin;
-  document.getElementById('ud-origem-wrap').style.display='none';
-  document.getElementById('ud-senha-wrap').style.display='none';
+  document.getElementById('ud-senha-label').textContent='Nova senha (opcional)';
+  document.getElementById('ud-senha').value='';
+  document.getElementById('ud-senha').placeholder='Deixe em branco pra manter a senha atual';
   document.getElementById('ud-error').textContent='';
   document.getElementById('modal-usuario-demandas').classList.add('open');
 };
-// BUGFIX: a opção "já tem login" (origem==='existente', o padrão) nunca
-// realmente procurava esse login — auth_user_id ficava sempre null, então o
-// botão "Senha" nunca aparecia pra ninguém adicionado por esse caminho (a
-// maioria dos usuários do Demandas, já que a maior parte já loga no CRM/Portal
-// por outro app). Procura por e-mail nos dois projetos antes de salvar.
-async function _buscarLoginExistente(email){
-  const { data: crmUser } = await sbCrm.from('crm_users').select('user_id').ilike('email',email).maybeSingle();
-  if(crmUser?.user_id) return { auth_user_id:crmUser.user_id, auth_source:'crm' };
-  const { data: portalUser } = await sbPortal.from('portal_users').select('user_id').ilike('email',email).maybeSingle();
-  if(portalUser?.user_id) return { auth_user_id:portalUser.user_id, auth_source:'portal' };
-  return null;
-}
 window.salvarUsuarioDemandas=async()=>{
   const id=document.getElementById('ud-id').value;
   const nome=document.getElementById('ud-nome').value.trim();
@@ -1564,66 +1526,39 @@ window.salvarUsuarioDemandas=async()=>{
   const setor_id=document.getElementById('ud-setor').value||null;
   const cargo=document.getElementById('ud-cargo').value.trim()||null;
   const is_admin=document.getElementById('ud-admin').checked;
+  const senha=document.getElementById('ud-senha').value.trim();
   const err=document.getElementById('ud-error');
   err.textContent='';
   if(!nome||!email){ err.textContent='Nome e e-mail são obrigatórios.'; return; }
 
   if(id){
-    const payload={nome,setor_id,cargo,is_admin};
-    // Auto-cura: se esse usuário ainda não tem login vinculado, tenta achar
-    // de novo a cada edição — cobre quem foi cadastrado antes desse fix.
-    const atual=ADM_USUARIOS_DEMANDAS_CACHE.find(x=>x.id===id);
-    if(!atual?.auth_user_id){
-      const achado=await _buscarLoginExistente(email);
-      if(achado){ payload.auth_user_id=achado.auth_user_id; payload.auth_source=achado.auth_source; }
-    }
-    const { error } = await Q.from('solicitantes_perfil').update(payload).eq('id',id);
+    const { error } = await sbCrm.rpc('demandas_admin_editar',{
+      p_caller_id:cp.id, p_alvo_id:id, p_nome:nome, p_email:email, p_is_admin:is_admin,
+      p_setor_id:setor_id, p_cargo:cargo, p_senha_nova:senha||null
+    });
     if(error){ err.textContent='Erro: '+error.message; return; }
     closeModal('modal-usuario-demandas'); showToast('Usuário atualizado.'); renderAdminUsuariosDemandas();
     return;
   }
-
-  const origem=document.getElementById('ud-origem').value;
-  let auth_user_id=null, auth_source=null;
-  if(origem==='novo'){
-    const senha=document.getElementById('ud-senha').value.trim()||(Math.random().toString(36).slice(-10)+'A1!');
-    try{
-      const resp=await fetch(CRM_URL+'/functions/v1/create-user',{
-        method:'POST', headers:{'Content-Type':'application/json','apikey':CRM_KEY,'Authorization':'Bearer '+CRM_KEY},
-        body:JSON.stringify({name:nome, email, password:senha, role:'vendedor', caller_email:cu.email})
-      });
-      const json=await resp.json();
-      if(json.error) throw new Error(json.error);
-      auth_user_id=json.user_id||null; auth_source='crm';
-      showToast('Login criado. Senha temporária: '+senha);
-    }catch(e){ err.textContent='Erro ao criar login: '+e.message; return; }
-  } else {
-    const achado=await _buscarLoginExistente(email);
-    if(achado){ auth_user_id=achado.auth_user_id; auth_source=achado.auth_source; }
-  }
-
-  const { error } = await Q.from('solicitantes_perfil').insert({nome,email,setor_id,cargo,is_admin,auth_user_id,auth_source});
+  if(!senha||senha.length<6){ err.textContent='Defina uma senha de pelo menos 6 caracteres pro novo usuário.'; return; }
+  const { error } = await sbCrm.rpc('demandas_admin_criar',{
+    p_caller_id:cp.id, p_nome:nome, p_email:email, p_senha:senha, p_is_admin:is_admin,
+    p_setor_id:setor_id, p_cargo:cargo
+  });
   if(error){ err.textContent='Erro: '+error.message; return; }
-  closeModal('modal-usuario-demandas'); showToast('Usuário salvo.'); renderAdminUsuariosDemandas();
+  closeModal('modal-usuario-demandas'); showToast('Usuário criado — já pode entrar com a senha definida.'); renderAdminUsuariosDemandas();
 };
-window.redefinirSenhaDemandas=async(id,nome)=>{
-  const u=ADM_USUARIOS_DEMANDAS_CACHE.find(x=>x.id===id);
-  if(!u?.auth_user_id){ showToast('Este usuário ainda não tem login vinculado.',false); return; }
-  const senhaCustom=prompt(`Nova senha temporária para "${nome}" (deixe em branco para gerar uma automática):`);
-  if(senhaCustom===null) return;
-  const url=(u.auth_source==='portal'?PORTAL_URL:CRM_URL)+'/functions/v1/operacional-reset-senha';
-  try{
-    const resp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caller_email:cu.email, auth_user_id:u.auth_user_id, password:senhaCustom||''})});
-    const json=await resp.json();
-    if(json.error){ showToast('Erro: '+json.error,false); return; }
-    showToast(json.senha_temporaria?`Senha redefinida. Nova senha temporária: ${json.senha_temporaria}`:'Senha redefinida.');
-  }catch(e){ showToast('Erro ao redefinir senha: '+e.message,false); }
+window.toggleAtivoUsuarioDemandas=async(id,ativoAtual)=>{
+  const { error } = await sbCrm.rpc('demandas_admin_toggle_ativo',{p_caller_id:cp.id, p_alvo_id:id, p_ativo:!ativoAtual});
+  if(error){ showToast('Erro: '+error.message,false); return; }
+  showToast(ativoAtual?'Usuário desativado.':'Usuário ativado.');
+  renderAdminUsuariosDemandas();
 };
 window.apagarUsuarioDemandas=async(id,nome)=>{
-  if(!confirm(`Remover "${nome}" da lista de usuários do Demandas? Isso NÃO apaga o login dela no CRM/Portal, só o cadastro e as permissões aqui no Demandas.`))return;
-  const { error } = await Q.from('solicitantes_perfil').delete().eq('id',id);
+  if(!confirm(`Apagar "${nome}" do Demandas? Ela perde o acesso e precisa de um novo cadastro pra voltar a entrar.`))return;
+  const { error } = await sbCrm.rpc('demandas_admin_apagar',{p_caller_id:cp.id, p_alvo_id:id});
   if(error){ showToast('Erro: '+error.message,false); return; }
-  showToast('Usuário removido do Demandas.');
+  showToast('Usuário apagado.');
   renderAdminUsuariosDemandas();
 };
 
@@ -1791,8 +1726,8 @@ document.addEventListener("keydown",e=>{
 
 (async()=>{
   document.getElementById("login-loading").classList.add("show");
-  const src=(await sbCrm.auth.getSession()).data.session?'crm':((await sbPortal.auth.getSession()).data.session?'portal':null);
-  if(src){ localStorage.setItem('demandas_auth_source',src); const ok=await tentarSessaoSalva(); if(ok){ document.getElementById("login-loading").classList.remove("show"); return; } }
+  const ok=await tentarSessaoSalva();
+  if(ok){ document.getElementById("login-loading").classList.remove("show"); return; }
   document.getElementById("login-loading").classList.remove("show");
   document.getElementById("auth-screen").style.display="flex";
 })();
