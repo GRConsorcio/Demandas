@@ -1308,6 +1308,19 @@ function getExtClass(name){
   return"other";
 }
 function fmtSize(b){if(!b)return"–";if(b<1024)return b+"B";if(b<1048576)return(b/1024).toFixed(1)+"KB";return(b/1048576).toFixed(1)+"MB";}
+// BUGFIX: Supabase Storage recusa chave com acento/cedilha/espaço ("Invalid
+// key") — nome original ("comprovante_Cláudio atualizado.jpg") ia direto pro
+// path e o upload falhava sempre que o arquivo tinha esses caracteres,
+// qualquer formato (não era específico de PNG). Sanitiza só a CHAVE do
+// Storage; o nome de exibição (file.name) continua intacto no registro salvo.
+function sanitizeFileName(name){
+  const dot=name.lastIndexOf(".");
+  const base=dot>0?name.slice(0,dot):name;
+  const ext=dot>0?name.slice(dot):"";
+  const baseLimpo=base.normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .replace(/[^a-zA-Z0-9_-]+/g,"_").replace(/_+/g,"_").replace(/^_|_$/g,"");
+  return(baseLimpo||"arquivo")+ext.toLowerCase().replace(/[^a-z0-9.]/g,"");
+}
 function fmtUploadDate(uploadedAt){
   if(!uploadedAt)return"–";
   return new Date(uploadedAt).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric"});
@@ -1361,7 +1374,7 @@ async function uploadFile(file){
   fill.style.width="30%";pct.textContent="...";
 
   try{
-    const path=`demandas/${vTicketId}/${Date.now()}_${file.name}`;
+    const path=`demandas/${vTicketId}/${Date.now()}_${sanitizeFileName(file.name)}`;
     const { error: upErr } = await sbCrm.storage.from(ANEXOS_BUCKET).upload(path, file, {upsert:false});
     if(upErr) throw upErr;
     fill.style.width="90%";
