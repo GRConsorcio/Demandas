@@ -733,6 +733,16 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
     <div class="mbody">
       <div style="font-size:0.78rem;color:var(--muted2);margin-bottom:0.7rem">Marque a equipe inteira ou escolha vendedor por vendedor.</div>
       <div id="as-cfg-lista"><div class="loading"><div class="spinner"></div></div></div>
+      <div style="border-top:1px solid var(--border);margin-top:0.6rem;padding-top:0.8rem">
+        <div style="font-weight:600;color:var(--gold2);margin-bottom:0.5rem">Vendedores cadastrados aqui (fora do CRM)</div>
+        <div id="as-man-lista" style="margin-bottom:0.6rem"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <input type="text" id="as-man-nome" placeholder="Nome do vendedor" style="flex:2;min-width:140px"/>
+          <input type="text" id="as-man-eq" list="as-man-eqs" placeholder="Equipe" style="flex:1;min-width:110px"/>
+          <datalist id="as-man-eqs"></datalist>
+          <button class="btn-submit" onclick="assidManualAdd()">+ Adicionar</button>
+        </div>
+      </div>
     </div>
     <div class="mfoot">
       <button class="btn-cancel" onclick="closeModal('modal-assid-cfg')">Cancelar</button>
@@ -1667,12 +1677,33 @@ window.assidAbrirConfig=async()=>{
   const { data, error } = await sbCrm.rpc('assiduidade_config_ler',{p_caller_id:cp.id});
   if(error){ document.getElementById('as-cfg-lista').innerHTML=`<div class="loading" style="color:var(--red)">${esc(error.message)}</div>`; return; }
   ASSID_CFG=data||[];
+  assidCarregarManuais();
   const eqs=[...new Set(ASSID_CFG.map(r=>r.equipe_id))];
   document.getElementById('as-cfg-lista').innerHTML=eqs.map(id=>{
     const rs=ASSID_CFG.filter(r=>r.equipe_id===id);
     return `<div style="margin-bottom:0.9rem"><label style="display:flex;align-items:center;gap:8px;font-weight:600;color:var(--gold2);cursor:pointer"><input type="checkbox" class="as-cfg-eq" data-id="${id}" ${rs[0].equipe_habilitada?'checked':''} onchange="assidCfgEquipe(this)" style="accent-color:var(--gold)"/> Equipe ${esc(rs[0].equipe)}</label>
       <div style="padding-left:26px;display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-top:6px">${rs.map(r=>`<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer"><input type="checkbox" class="as-cfg-v" data-eq="${id}" data-id="${r.vendedor_id}" ${r.incluido?'checked':''} style="accent-color:var(--gold)"/>${esc(r.nome)}</label>`).join('')}</div></div>`;
   }).join('');
+};
+async function assidCarregarManuais(){
+  const { data } = await sbCrm.rpc('assiduidade_manuais_ler',{p_caller_id:cp.id});
+  const ms=data||[];
+  document.getElementById('as-man-lista').innerHTML=ms.map(m=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.82rem;padding:3px 0"><span style="flex:1">${esc(m.nome)} <span style="color:var(--muted)">· ${esc(m.equipe)}</span></span><button class="attach-del" onclick="assidManualDel('${m.id}')" title="Remover">✕</button></div>`).join('')||'<div style="font-size:0.78rem;color:var(--muted)">Nenhum ainda.</div>';
+  const nomes=new Set([...ASSID_CFG.map(r=>r.equipe),...ms.map(m=>m.equipe)]);
+  document.getElementById('as-man-eqs').innerHTML=[...nomes].map(n=>`<option value="${esc(n)}">`).join('');
+}
+window.assidManualAdd=async()=>{
+  const nome=document.getElementById('as-man-nome').value.trim(), eq=document.getElementById('as-man-eq').value.trim();
+  if(!nome||!eq){ showToast('Informe nome e equipe.',false); return; }
+  const { error } = await sbCrm.rpc('assiduidade_manual_salvar',{p_caller_id:cp.id,p_nome:nome,p_equipe:eq});
+  if(error){ showToast('Erro: '+error.message,false); return; }
+  document.getElementById('as-man-nome').value=''; assidCarregarManuais(); carregarAssiduidade();
+};
+window.assidManualDel=async id=>{
+  if(!confirm('Remover este vendedor da Assiduidade? O histórico de presença dele é mantido.'))return;
+  const { error } = await sbCrm.rpc('assiduidade_manual_remover',{p_caller_id:cp.id,p_id:id});
+  if(error){ showToast('Erro: '+error.message,false); return; }
+  assidCarregarManuais(); carregarAssiduidade();
 };
 window.assidCfgEquipe=el=>{ document.querySelectorAll(`.as-cfg-v[data-eq="${el.dataset.id}"]`).forEach(c=>c.checked=el.checked); };
 window.assidSalvarConfig=async()=>{
