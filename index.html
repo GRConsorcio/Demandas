@@ -510,6 +510,7 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
             <input type="date" id="as-data" onchange="carregarAssiduidade()"/>
             <button class="btn-cancel" onclick="assidMoverDia(1)">›</button>
             <button class="btn-cancel" onclick="assidHoje()">Hoje</button>
+            <button class="btn-cancel" onclick="assidImprimir()" title="Imprimir o relatório do dia com todos os anexos">🖨 Relatório do dia</button>
             <button class="btn-cancel" id="as-cfg-btn" style="display:none" onclick="assidAbrirConfig()">⚙ Equipes e vendedores</button>
             <div class="as-sum" id="as-sum"></div>
           </div>
@@ -1748,6 +1749,50 @@ function iniciarAssiduidade(){
   el.max=assidHojeStr();
   carregarAssiduidade();
 }
+// Relatório do dia para imprimir/salvar em PDF: resumo, tabela por equipe e cada anexo (imagens aparecem inteiras;
+// PDF/Word aparecem como nome + link, porque o navegador não imprime documento dentro de documento).
+window.assidImprimir=async()=>{
+  const dataStr=document.getElementById('as-data').value;
+  if(!dataStr||!ASSID.length){showToast('Nada para imprimir nesse dia.',false);return;}
+  const escH=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const isImg=a=>/\.(png|jpe?g|gif|webp|bmp)(\?.*)?$/i.test(a.name||'')||/\.(png|jpe?g|gif|webp|bmp)(\?.*)?$/i.test(a.url||'');
+  const dataFmt=new Date(dataStr+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  const pres=ASSID.filter(r=>r.status==='presente').length, falt=ASSID.filter(r=>r.status==='faltou').length;
+  let eq=null,corpo='';
+  ASSID.forEach(r=>{
+    if(r.equipe!==eq){ if(eq!==null) corpo+='</tbody></table>'; eq=r.equipe; corpo+=`<h2>Equipe ${escH(eq||'—')}</h2><table><thead><tr><th style="width:26%">Vendedor</th><th style="width:13%">Situação</th><th style="width:16%">Confirmado</th><th>Observação e anexos</th></tr></thead><tbody>`; }
+    const st=r.status==='presente'?'<b class="ok">✔ Veio</b>':r.status==='faltou'?'<b class="no">✘ Faltou</b>':'<span class="nm">Sem marcação</span>';
+    const anx=(r.anexos||[]).map(a=>isImg(a)
+      ?`<div class="anx"><img src="${escH(a.url)}" alt=""><div class="cap">${escH(a.name)}</div></div>`
+      :`<div class="anx doc">📄 ${escH(a.name)}<br><span class="cap">${escH(a.url)}</span></div>`).join('');
+    corpo+=`<tr><td>${escH(r.nome)}</td><td>${st}</td><td>${r.status?escH(fmtHora(r.marcado_em))+'<br><span class="cap">por '+escH(r.registrado_por_nome||'—')+'</span>':'—'}</td><td>${r.obs?'<div class="obs">'+escH(r.obs)+'</div>':''}${anx||(r.obs?'':'<span class="nm">—</span>')}</td></tr>`;
+  });
+  corpo+='</tbody></table>';
+  const html=`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Assiduidade ${dataStr}</title><style>
+  *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:24px;font-size:12px}
+  h1{font-size:20px;margin:0 0 2px}.sub{color:#555;margin-bottom:10px;text-transform:capitalize}
+  .res{display:flex;gap:18px;margin:8px 0 14px;font-size:13px}.res b{font-size:16px}
+  h2{font-size:14px;margin:18px 0 6px;padding:4px 8px;background:#eee;border-left:4px solid #b8902b;page-break-after:avoid}
+  table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px 8px;vertical-align:top;text-align:left}th{background:#f6f6f6;font-size:11px}
+  tr{page-break-inside:avoid}.ok{color:#137333}.no{color:#c5221f}.nm{color:#888}.cap{color:#666;font-size:10px;word-break:break-all}
+  .obs{margin-bottom:6px;font-style:italic}.anx{margin:4px 0;page-break-inside:avoid}.anx img{max-width:100%;max-height:320px;border:1px solid #ddd;display:block}
+  .doc{padding:6px;border:1px dashed #aaa}.rod{margin-top:18px;color:#777;font-size:10px}
+  @media print{body{margin:10mm}}</style></head><body>
+  <h1>Relatório de Assiduidade</h1><div class="sub">${escH(dataFmt)}</div>
+  <div class="res"><span><b class="ok">${pres}</b> vieram</span><span><b class="no">${falt}</b> faltaram</span><span><b>${ASSID.length-pres-falt}</b> sem marcação</span><span><b>${ASSID.length}</b> no total</span></div>
+  ${corpo}<div class="rod">Emitido em ${escH(new Date().toLocaleString('pt-BR'))} por ${escH(cp?.nome||'')} — Demandas GR</div></body></html>`;
+  const fr=document.createElement('iframe');
+  fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(fr);
+  fr.srcdoc=html;
+  fr.onload=async()=>{
+    const d=fr.contentDocument;
+    // espera as imagens dos anexos carregarem antes de abrir a impressão
+    await Promise.all([...d.images].map(im=>im.complete?1:new Promise(r=>{im.onload=im.onerror=r;})));
+    fr.contentWindow.focus(); fr.contentWindow.print();
+    setTimeout(()=>fr.remove(),60000);
+  };
+};
 window.assidHoje=()=>{document.getElementById('as-data').value=assidHojeStr();carregarAssiduidade();};
 window.assidMoverDia=n=>{
   const el=document.getElementById('as-data');
