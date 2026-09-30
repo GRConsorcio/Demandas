@@ -731,6 +731,10 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
   <div class="modal" style="max-width:520px">
     <div class="mhead"><div class="mhead-l"><span>⚙</span><h3>Quem entra na Assiduidade</h3></div><button class="mclose" onclick="closeModal('modal-assid-cfg')">✕</button></div>
     <div class="mbody">
+      <div style="font-weight:600;color:var(--gold2);margin-bottom:0.3rem">Quem pode ver a página Assiduidade</div>
+      <div style="font-size:0.76rem;color:var(--muted2);margin-bottom:0.5rem">Marque quem vê e preenche. Administradores sempre veem. A mudança vale na hora.</div>
+      <div id="as-quem-lista" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-bottom:0.9rem"></div>
+      <div style="border-top:1px solid var(--border);padding-top:0.8rem;font-weight:600;color:var(--gold2);margin-bottom:0.3rem">Quem aparece na lista de presença</div>
       <div style="font-size:0.78rem;color:var(--muted2);margin-bottom:0.7rem">Marque a equipe inteira ou escolha vendedor por vendedor.</div>
       <div id="as-cfg-lista"><div class="loading"><div class="spinner"></div></div></div>
       <div style="border-top:1px solid var(--border);margin-top:0.6rem;padding-top:0.8rem">
@@ -755,7 +759,8 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
   <div class="modal" style="max-width:460px">
     <div class="mhead"><div class="mhead-l"><span>📎</span><h3 id="as-m-titulo">Falta</h3></div><button class="mclose" onclick="closeModal('modal-assid')">✕</button></div>
     <div class="mbody">
-      <div style="font-size:0.78rem;color:var(--muted2);margin-bottom:0.7rem">Opcional: anexe atestado ou comprovante e/ou escreva uma observação.</div>
+      <div id="as-m-prazo" style="font-size:0.78rem;color:var(--gold2);margin-bottom:0.4rem"></div>
+      <div style="font-size:0.78rem;color:var(--muted2);margin-bottom:0.7rem">Opcional: anexe atestado, comprovante ou outro documento e/ou escreva uma observação.</div>
       <div class="fg2"><label>Observação</label><textarea id="as-m-obs" rows="2" placeholder="Ex: atestado médico, consulta..."></textarea></div>
       <div class="fg2"><label>Anexos</label>
         <div id="as-m-anexos" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px"></div>
@@ -1670,6 +1675,14 @@ window.apagarUsuarioDemandas=async(id,nome)=>{
 // do usuário). A regra vale no banco (RPCs assiduidade_* checam o chamador);
 // esconder o menu aqui é só conveniência.
 let ASSID=[],ASSID_MODAL=null;
+const fmtHora=ts=>ts?new Date(ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+(new Date(ts).toDateString()!==new Date().toDateString()?' de '+new Date(ts).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):''):'–';
+// Prazo de 48h para anexar/alterar contado da hora da confirmação (o banco também impõe; admin não tem prazo).
+const assidPrazoAberto=r=>isAdmin()||!r.marcado_em||Date.now()<new Date(r.marcado_em).getTime()+48*3600*1000;
+const assidPrazoTexto=r=>{
+  if(isAdmin())return 'Como administrador você pode anexar a qualquer momento.';
+  const fim=new Date(new Date(r.marcado_em).getTime()+48*3600*1000);
+  return Date.now()<fim?`Você pode anexar até ${fim.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} (48h após a confirmação).`:'O prazo de 48h para anexar já terminou.';
+};
 const assidHojeStr=()=>new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
 let ASSID_CFG=[];
 window.assidAbrirConfig=async()=>{
@@ -1677,13 +1690,22 @@ window.assidAbrirConfig=async()=>{
   const { data, error } = await sbCrm.rpc('assiduidade_config_ler',{p_caller_id:cp.id});
   if(error){ document.getElementById('as-cfg-lista').innerHTML=`<div class="loading" style="color:var(--red)">${esc(error.message)}</div>`; return; }
   ASSID_CFG=data||[];
-  assidCarregarManuais();
+  assidCarregarManuais(); assidCarregarQuem();
   const eqs=[...new Set(ASSID_CFG.map(r=>r.equipe_id))];
   document.getElementById('as-cfg-lista').innerHTML=eqs.map(id=>{
     const rs=ASSID_CFG.filter(r=>r.equipe_id===id);
     return `<div style="margin-bottom:0.9rem"><label style="display:flex;align-items:center;gap:8px;font-weight:600;color:var(--gold2);cursor:pointer"><input type="checkbox" class="as-cfg-eq" data-id="${id}" ${rs[0].equipe_habilitada?'checked':''} onchange="assidCfgEquipe(this)" style="accent-color:var(--gold)"/> Equipe ${esc(rs[0].equipe)}</label>
       <div style="padding-left:26px;display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-top:6px">${rs.map(r=>`<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer"><input type="checkbox" class="as-cfg-v" data-eq="${id}" data-id="${r.vendedor_id}" ${r.incluido?'checked':''} style="accent-color:var(--gold)"/>${esc(r.nome)}</label>`).join('')}</div></div>`;
   }).join('');
+};
+async function assidCarregarQuem(){
+  const { data } = await sbCrm.from('demandas_usuarios_publica').select('id,nome,is_admin,pode_assiduidade,ativo').eq('ativo',true).order('nome');
+  document.getElementById('as-quem-lista').innerHTML=(data||[]).map(u=>`<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;${u.is_admin?'opacity:.6':''}"><input type="checkbox" ${u.is_admin||u.pode_assiduidade?'checked':''} ${u.is_admin?'disabled':''} onchange="assidQuemToggle('${u.id}',this)" style="accent-color:var(--gold)"/>${esc(u.nome)}${u.is_admin?' (admin)':''}</label>`).join('')||'Nenhum usuário.';
+}
+window.assidQuemToggle=async(id,el)=>{
+  const { error } = await sbCrm.rpc('demandas_admin_set_assiduidade',{p_caller_id:cp.id,p_alvo_id:id,p_pode:el.checked});
+  if(error){ el.checked=!el.checked; showToast('Erro: '+error.message,false); return; }
+  showToast(el.checked?'Agora vê a Assiduidade.':'Não vê mais a Assiduidade.');
 };
 async function assidCarregarManuais(){
   const { data } = await sbCrm.rpc('assiduidade_manuais_ler',{p_caller_id:cp.id});
@@ -1751,8 +1773,8 @@ function renderAssiduidade(){
     const nAn=(r.anexos||[]).length;
     const cls=r.status==='presente'?'ok':r.status==='faltou'?'no':'';
     h+=`<div class="as-row ${cls}">
-      <div class="as-nome">${esc(r.nome)}${r.registrado_por_nome&&r.status?`<small>marcado por ${esc(r.registrado_por_nome)}</small>`:''}</div>
-      ${r.status==='faltou'?`<button class="as-btn clip ${nAn||r.obs?'has':''}" onclick="assidAbrirDetalhes('${r.vendedor_id}')" title="Anexos e observação">📎 ${nAn?nAn:'Anexar'}</button>`:''}
+      <div class="as-nome">${esc(r.nome)}${r.registrado_por_nome&&r.status?`<small>confirmado às ${fmtHora(r.marcado_em)} por ${esc(r.registrado_por_nome)}</small>`:''}</div>
+      ${r.status?`<button class="as-btn clip ${nAn||r.obs?'has':''}" onclick="assidAbrirDetalhes('${r.vendedor_id}')" title="${assidPrazoAberto(r)?'Anexos e observação':'Prazo de 48h encerrado'}">${assidPrazoAberto(r)?'📎':'🔒'} ${nAn?nAn:(assidPrazoAberto(r)?'Anexar':'')}</button>`:''}
       <button class="as-btn v ${r.status==='presente'?'on':''}" onclick="assidMarcar('${r.vendedor_id}','presente')" title="Veio">${ICO_V}</button>
       <button class="as-btn x ${r.status==='faltou'?'on':''}" onclick="assidMarcar('${r.vendedor_id}','faltou')" title="Faltou">${ICO_X}</button>
     </div>`;
@@ -1762,16 +1784,18 @@ function renderAssiduidade(){
 window.assidMarcar=async(vid,status)=>{
   const r=ASSID.find(x=>x.vendedor_id===vid); if(!r)return;
   const novo=r.status===status?null:status; // clicar de novo desmarca
-  const antes={status:r.status,registrado_por_nome:r.registrado_por_nome};
-  r.status=novo; r.registrado_por_nome=cp.nome; renderAssiduidade();
+  const antes={status:r.status,registrado_por_nome:r.registrado_por_nome,marcado_em:r.marcado_em};
+  r.status=novo; r.registrado_por_nome=cp.nome; if(novo!==antes.status) r.marcado_em=new Date().toISOString(); renderAssiduidade();
   const { error } = await sbCrm.rpc('assiduidade_marcar',{p_caller_id:cp.id,p_data:document.getElementById('as-data').value,p_vendedor_id:vid,p_status:novo});
   if(error){ Object.assign(r,antes); renderAssiduidade(); showToast('Erro: '+error.message,false); return; }
   if(novo==='faltou') assidAbrirDetalhes(vid);
-};
-window.assidAbrirDetalhes=vid=>{
+};window.assidAbrirDetalhes=vid=>{
   const r=ASSID.find(x=>x.vendedor_id===vid); if(!r)return;
   ASSID_MODAL={vid,anexos:[...(r.anexos||[])]};
-  document.getElementById('as-m-titulo').textContent='Falta — '+r.nome;
+  document.getElementById('as-m-titulo').textContent=(r.status==='faltou'?'Falta — ':'Presença — ')+r.nome;
+  document.getElementById('as-m-prazo').textContent=`Confirmado às ${fmtHora(r.marcado_em)}. `+assidPrazoTexto(r);
+  document.querySelectorAll('#modal-assid .mfoot .btn-submit,#modal-assid button.btn-cancel[onclick*="as-m-file"]').forEach(b=>b.disabled=!assidPrazoAberto(r));
+  document.getElementById('as-m-obs').disabled=!assidPrazoAberto(r);
   document.getElementById('as-m-obs').value=r.obs||'';
   document.getElementById('as-m-status').textContent='';
   assidRenderAnexos();
