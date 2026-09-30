@@ -141,6 +141,23 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
 .badge-aguardando{background:rgba(251,191,36,0.12);color:#fbbf24;}
 .btn-view{padding:0.28rem 0.7rem;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted2);font-family:"Inter",sans-serif;font-size:0.73rem;cursor:pointer;transition:all 0.2s;white-space:nowrap;}
 .btn-view:hover{border-color:var(--gold3);color:var(--gold2);}
+.as-eq{font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;padding:0.9rem 0.2rem 0.4rem;display:flex;align-items:center;gap:8px}
+.as-eq b{color:var(--gold2);font-weight:600}
+.as-row{display:flex;align-items:center;gap:10px;padding:0.55rem 0.9rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.4rem;transition:border-color .15s,background .15s}
+.as-row.ok{border-color:rgba(74,222,128,0.45);background:rgba(74,222,128,0.06)}
+.as-row.no{border-color:rgba(248,113,113,0.45);background:rgba(248,113,113,0.06)}
+.as-nome{flex:1;font-size:0.88rem;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.as-nome small{display:block;color:var(--muted);font-size:0.68rem;margin-top:1px}
+.as-btn{width:38px;height:38px;border-radius:10px;border:1.5px solid var(--border);background:transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;color:var(--muted);flex-shrink:0}
+.as-btn svg{width:20px;height:20px}
+.as-btn.v:hover,.as-btn.v.on{background:var(--green);border-color:var(--green);color:#052e14}
+.as-btn.x:hover,.as-btn.x.on{background:var(--red);border-color:var(--red);color:#3b0a0a}
+.as-btn.clip{width:auto;padding:0 10px;font-size:0.74rem;gap:5px;color:var(--muted2)}
+.as-btn.clip:hover,.as-btn.clip.has{border-color:var(--gold);color:var(--gold2)}
+.as-bar{display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-bottom:0.6rem}
+.as-bar input[type=date]{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:0.45rem 0.7rem;font-family:"Inter",sans-serif;font-size:0.84rem;color-scheme:dark}
+.as-sum{margin-left:auto;font-size:0.8rem;color:var(--muted2);display:flex;gap:0.9rem}
+.as-sum b.g{color:var(--green)}.as-sum b.r{color:var(--red)}
 .loading{display:flex;align-items:center;justify-content:center;padding:2.5rem;gap:10px;color:var(--muted);font-size:0.84rem;}
 .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -368,6 +385,10 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
         Meus Chamados
         <span class="nav-badge" id="badge-meus">0</span>
       </button>
+      <button class="nav-item" id="nav-assid-btn" style="display:none" onclick="setView('assiduidade',this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 11l3 3 8-8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Assiduidade
+      </button>
       <div class="nav-sec">Conta</div>
       <button class="nav-item" onclick="setView('perfil',this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -483,6 +504,16 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
           <button class="btn-gold" onclick="openEditProfile()" style="max-width:220px;margin:0 auto;display:block;padding:0.6rem 1.5rem;font-size:0.85rem;">✏️ Editar Perfil</button>
         </div>
 
+        <div id="view-assiduidade" style="display:none">
+          <div class="as-bar">
+            <button class="btn-cancel" onclick="assidMoverDia(-1)">‹</button>
+            <input type="date" id="as-data" onchange="carregarAssiduidade()"/>
+            <button class="btn-cancel" onclick="assidMoverDia(1)">›</button>
+            <button class="btn-cancel" onclick="assidHoje()">Hoje</button>
+            <div class="as-sum" id="as-sum"></div>
+          </div>
+          <div id="as-lista"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
+        </div>
         <div id="view-admin" style="display:none">
           <div style="display:flex;justify-content:flex-end;margin-bottom:0.9rem">
             <button class="btn-new" onclick="abrirNovoUsuarioDemandas()"><svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" stroke-width="3" stroke-linecap="round"/></svg><span>Novo usuário</span></button>
@@ -490,7 +521,7 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
           <div class="tw">
             <div id="load-adm-usuarios" class="loading"><div class="spinner"></div>Carregando usuários...</div>
             <table class="tt" id="adm-usuarios-table" style="display:none">
-              <thead><tr><th>Nome</th><th>E-mail</th><th>Setor</th><th>Cargo</th><th>Admin</th><th></th></tr></thead>
+              <thead><tr><th>Nome</th><th>E-mail</th><th>Setor</th><th>Cargo</th><th>Admin</th><th>Assiduidade</th><th></th></tr></thead>
               <tbody id="adm-usuarios-body"></tbody>
             </table>
           </div>
@@ -695,6 +726,26 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
 </div>
 
 <!-- MODAL USUÁRIO (admin) -->
+<div class="moverlay" id="modal-assid">
+  <div class="modal" style="max-width:460px">
+    <div class="mhead"><div class="mhead-l"><span>📎</span><h3 id="as-m-titulo">Falta</h3></div><button class="mclose" onclick="closeModal('modal-assid')">✕</button></div>
+    <div class="mbody">
+      <div style="font-size:0.78rem;color:var(--muted2);margin-bottom:0.7rem">Opcional: anexe atestado ou comprovante e/ou escreva uma observação.</div>
+      <div class="fg2"><label>Observação</label><textarea id="as-m-obs" rows="2" placeholder="Ex: atestado médico, consulta..."></textarea></div>
+      <div class="fg2"><label>Anexos</label>
+        <div id="as-m-anexos" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px"></div>
+        <input type="file" id="as-m-file" multiple accept="image/*,application/pdf,.doc,.docx" style="display:none" onchange="assidUpload(this)"/>
+        <button class="btn-cancel" onclick="document.getElementById('as-m-file').click()">+ Adicionar arquivo</button>
+        <span id="as-m-status" style="font-size:0.75rem;color:var(--muted);margin-left:8px"></span>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn-cancel" onclick="closeModal('modal-assid')">Cancelar</button>
+      <button class="btn-submit" onclick="assidSalvarDetalhes()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div class="moverlay" id="modal-usuario-demandas">
   <div class="modal" style="max-width:460px">
     <div class="mhead"><div class="mhead-l"><span>🛠️</span><h3 id="ud-titulo">Usuário</h3></div><button class="mclose" onclick="closeModal('modal-usuario-demandas')">✕</button></div>
@@ -709,6 +760,10 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
       <div class="fg2" style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" id="ud-admin" style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer"/>
         <label for="ud-admin" style="margin:0;cursor:pointer;user-select:none">É administrador do Demandas</label>
+      </div>
+      <div class="fg2" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="ud-assid" style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer"/>
+        <label for="ud-assid" style="margin:0;cursor:pointer;user-select:none">Pode ver e preencher a Assiduidade</label>
       </div>
       <div id="ud-senha-wrap" class="fg2"><label id="ud-senha-label">Senha</label><input type="password" id="ud-senha" placeholder="Mínimo 6 caracteres"/></div>
       <div id="ud-error" class="auth-err"></div>
@@ -799,6 +854,7 @@ let cu=null,cp=null,tickets=[],cFilter="todos",cView="dashboard",vTicketId=null,
 const uOrd={critico:0,alto:1,medio:2,baixo:3};
 const uClr={critico:"#f87171",alto:"#fb923c",medio:"#fbbf24",baixo:"#4ade80"};
 const isAdmin=()=>!!cp?.is_admin;
+const podeAssiduidade=()=>!!(cp?.is_admin||cp?.pode_assiduidade);
 // (cp agora vem de demandas_usuarios/demandas_login — mesmo campo is_admin de antes)
 // Chamado "particular": visível só pra quem abriu e pro admin — igual DemandasGR.
 const canSeeTicket=t=>!t.privado||(t.solicitante_email||'').toLowerCase()===(cu?.email||'').toLowerCase()||isAdmin();
@@ -905,6 +961,7 @@ function showApp(){
   if(cp?.criado_em)document.getElementById("p-since").textContent=fmt(cp.criado_em).split(" ")[0];
   document.getElementById('nav-sec-admin').style.display = cp?.is_admin?'':'none';
   document.getElementById('nav-admin-btn').style.display = cp?.is_admin?'':'none';
+  document.getElementById('nav-assid-btn').style.display = podeAssiduidade()?'':'none';
 }
 
 // ── TICKETS (realtime via Supabase, equivalente ao onSnapshot do Firestore) ──
@@ -1011,13 +1068,15 @@ window.setView=(v,el)=>{
   cView=v;closeSidebar();
   document.querySelectorAll(".nav-item").forEach(b=>b.classList.remove("active"));
   if(el)el.classList.add("active");
-  const t={dashboard:["Dashboard","Visão geral dos chamados"],todos:["Todos os Chamados","Fila de prioridade geral"],meus:["Meus Chamados","Chamados abertos por mim"],perfil:["Meu Perfil","Informações da conta"],admin:["Usuários","Gerenciar quem usa o Demandas"]};
+  const t={dashboard:["Dashboard","Visão geral dos chamados"],todos:["Todos os Chamados","Fila de prioridade geral"],meus:["Meus Chamados","Chamados abertos por mim"],perfil:["Meu Perfil","Informações da conta"],assiduidade:["Assiduidade","Quem veio trabalhar"],admin:["Usuários","Gerenciar quem usa o Demandas"]};
   document.getElementById("view-title").textContent=t[v]?.[0]||v;
   document.getElementById("view-sub").textContent=t[v]?.[1]||"";
-  document.getElementById("view-tickets").style.display=(v!=="perfil"&&v!=="admin")?"block":"none";
+  document.getElementById("view-tickets").style.display=(v!=="perfil"&&v!=="admin"&&v!=="assiduidade")?"block":"none";
+  document.getElementById("view-assiduidade").style.display=v==="assiduidade"?"block":"none";
   document.getElementById("view-perfil").style.display=v==="perfil"?"block":"none";
   document.getElementById("view-admin").style.display=v==="admin"?"block":"none";
   if(v==="admin")renderAdminUsuariosDemandas();
+  else if(v==="assiduidade")iniciarAssiduidade();
   else if(v!=="perfil")renderTickets();
 };
 window.goToPerfil=()=>{const btns=document.querySelectorAll(".nav-item");let b=null;btns.forEach(x=>{if(x.textContent.trim().startsWith("Meu Perfil"))b=x;});setView("perfil",b);};
@@ -1495,12 +1554,13 @@ async function renderAdminUsuariosDemandas(){
     <td style="font-size:0.78rem;color:var(--muted2)">${esc(SETORES.find(s=>s.id===u.setor_id)?.nome||'—')}</td>
     <td style="font-size:0.78rem;color:var(--muted2)">${esc(u.cargo||'—')}</td>
     <td>${u.is_admin?'<span class="badge badge-baixo">Sim</span>':'—'}</td>
+    <td>${u.is_admin||u.pode_assiduidade?'<span class="badge badge-baixo">Sim</span>':'—'}</td>
     <td style="white-space:nowrap">
       <button class="btn-view" onclick="abrirEditarUsuarioDemandas('${u.id}')">Editar</button>
       <button class="btn-view" onclick="toggleAtivoUsuarioDemandas('${u.id}',${u.ativo})">${u.ativo?'Desativar':'Ativar'}</button>
       <button class="btn-delete" onclick="apagarUsuarioDemandas('${u.id}','${(u.nome||'').replace(/'/g,"\\'")}')">🗑</button>
     </td>
-  </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">Nenhum usuário.</td></tr>';
+  </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted)">Nenhum usuário.</td></tr>';
 }
 window.abrirNovoUsuarioDemandas=()=>{
   document.getElementById('ud-titulo').textContent='Novo usuário';
@@ -1509,6 +1569,7 @@ window.abrirNovoUsuarioDemandas=()=>{
   document.getElementById('ud-email').disabled=false;
   document.getElementById('ud-setor').value=''; document.getElementById('ud-cargo').value='';
   document.getElementById('ud-admin').checked=false;
+  document.getElementById('ud-assid').checked=false;
   document.getElementById('ud-senha-label').textContent='Senha';
   document.getElementById('ud-senha').value='';
   document.getElementById('ud-senha').placeholder='Mínimo 6 caracteres';
@@ -1526,6 +1587,7 @@ window.abrirEditarUsuarioDemandas=id=>{
   document.getElementById('ud-setor').value=u.setor_id||'';
   document.getElementById('ud-cargo').value=u.cargo||'';
   document.getElementById('ud-admin').checked=!!u.is_admin;
+  document.getElementById('ud-assid').checked=!!u.pode_assiduidade;
   document.getElementById('ud-senha-label').textContent='Nova senha (opcional)';
   document.getElementById('ud-senha').value='';
   document.getElementById('ud-senha').placeholder='Deixe em branco pra manter a senha atual';
@@ -1550,15 +1612,18 @@ window.salvarUsuarioDemandas=async()=>{
       p_setor_id:setor_id, p_cargo:cargo, p_senha_nova:senha||null
     });
     if(error){ err.textContent='Erro: '+error.message; return; }
+    const { error:eA } = await sbCrm.rpc('demandas_admin_set_assiduidade',{p_caller_id:cp.id,p_alvo_id:id,p_pode:document.getElementById('ud-assid').checked});
+    if(eA){ err.textContent='Erro (assiduidade): '+eA.message; return; }
     closeModal('modal-usuario-demandas'); showToast('Usuário atualizado.'); renderAdminUsuariosDemandas();
     return;
   }
   if(!senha||senha.length<6){ err.textContent='Defina uma senha de pelo menos 6 caracteres pro novo usuário.'; return; }
-  const { error } = await sbCrm.rpc('demandas_admin_criar',{
+  const { data:novoId, error } = await sbCrm.rpc('demandas_admin_criar',{
     p_caller_id:cp.id, p_nome:nome, p_email:email, p_senha:senha, p_is_admin:is_admin,
     p_setor_id:setor_id, p_cargo:cargo
   });
   if(error){ err.textContent='Erro: '+error.message; return; }
+  if(novoId&&document.getElementById('ud-assid').checked) await sbCrm.rpc('demandas_admin_set_assiduidade',{p_caller_id:cp.id,p_alvo_id:novoId,p_pode:true});
   closeModal('modal-usuario-demandas'); showToast('Usuário criado — já pode entrar com a senha definida.'); renderAdminUsuariosDemandas();
 };
 window.toggleAtivoUsuarioDemandas=async(id,ativoAtual)=>{
@@ -1573,6 +1638,99 @@ window.apagarUsuarioDemandas=async(id,nome)=>{
   if(error){ showToast('Erro: '+error.message,false); return; }
   showToast('Usuário apagado.');
   renderAdminUsuariosDemandas();
+};
+
+// ── ASSIDUIDADE (supervisores marcam quem veio trabalhar) ─────────────────────
+// Acesso: is_admin OU demandas_usuarios.pode_assiduidade (admin liga no cadastro
+// do usuário). A regra vale no banco (RPCs assiduidade_* checam o chamador);
+// esconder o menu aqui é só conveniência.
+let ASSID=[],ASSID_MODAL=null;
+const assidHojeStr=()=>new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+function iniciarAssiduidade(){
+  const el=document.getElementById('as-data');
+  if(!el.value) el.value=assidHojeStr();
+  el.max=assidHojeStr();
+  carregarAssiduidade();
+}
+window.assidHoje=()=>{document.getElementById('as-data').value=assidHojeStr();carregarAssiduidade();};
+window.assidMoverDia=n=>{
+  const el=document.getElementById('as-data');
+  const d=new Date((el.value||assidHojeStr())+'T12:00:00'); d.setDate(d.getDate()+n);
+  const v=d.toISOString().slice(0,10); if(v>assidHojeStr())return;
+  el.value=v; carregarAssiduidade();
+};
+window.carregarAssiduidade=async()=>{
+  const data=document.getElementById('as-data').value;
+  if(!data)return;
+  const { data:rows, error } = await sbCrm.rpc('assiduidade_listar',{p_caller_id:cp.id,p_data:data});
+  if(error){ document.getElementById('as-lista').innerHTML=`<div class="loading" style="color:var(--red)">${esc(error.message)}</div>`; return; }
+  ASSID=rows||[]; renderAssiduidade();
+};
+const ICO_V='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+const ICO_X='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+function renderAssiduidade(){
+  const pres=ASSID.filter(r=>r.status==='presente').length, falt=ASSID.filter(r=>r.status==='faltou').length;
+  document.getElementById('as-sum').innerHTML=`<span><b class="g">${pres}</b> vieram</span><span><b class="r">${falt}</b> faltaram</span><span><b>${ASSID.length-pres-falt}</b> sem marcar</span>`;
+  let eq=null,h='';
+  ASSID.forEach(r=>{
+    if(r.equipe!==eq){ eq=r.equipe; const n=ASSID.filter(x=>x.equipe===eq).length; h+=`<div class="as-eq">Equipe <b>${esc(eq||'—')}</b> · ${n}</div>`; }
+    const nAn=(r.anexos||[]).length;
+    const cls=r.status==='presente'?'ok':r.status==='faltou'?'no':'';
+    h+=`<div class="as-row ${cls}">
+      <div class="as-nome">${esc(r.nome)}${r.registrado_por_nome&&r.status?`<small>marcado por ${esc(r.registrado_por_nome)}</small>`:''}</div>
+      ${r.status==='faltou'?`<button class="as-btn clip ${nAn||r.obs?'has':''}" onclick="assidAbrirDetalhes('${r.vendedor_id}')" title="Anexos e observação">📎 ${nAn?nAn:'Anexar'}</button>`:''}
+      <button class="as-btn v ${r.status==='presente'?'on':''}" onclick="assidMarcar('${r.vendedor_id}','presente')" title="Veio">${ICO_V}</button>
+      <button class="as-btn x ${r.status==='faltou'?'on':''}" onclick="assidMarcar('${r.vendedor_id}','faltou')" title="Faltou">${ICO_X}</button>
+    </div>`;
+  });
+  document.getElementById('as-lista').innerHTML=h||'<div class="loading">Nenhum vendedor encontrado.</div>';
+}
+window.assidMarcar=async(vid,status)=>{
+  const r=ASSID.find(x=>x.vendedor_id===vid); if(!r)return;
+  const novo=r.status===status?null:status; // clicar de novo desmarca
+  const antes={status:r.status,registrado_por_nome:r.registrado_por_nome};
+  r.status=novo; r.registrado_por_nome=cp.nome; renderAssiduidade();
+  const { error } = await sbCrm.rpc('assiduidade_marcar',{p_caller_id:cp.id,p_data:document.getElementById('as-data').value,p_vendedor_id:vid,p_status:novo});
+  if(error){ Object.assign(r,antes); renderAssiduidade(); showToast('Erro: '+error.message,false); return; }
+  if(novo==='faltou') assidAbrirDetalhes(vid);
+};
+window.assidAbrirDetalhes=vid=>{
+  const r=ASSID.find(x=>x.vendedor_id===vid); if(!r)return;
+  ASSID_MODAL={vid,anexos:[...(r.anexos||[])]};
+  document.getElementById('as-m-titulo').textContent='Falta — '+r.nome;
+  document.getElementById('as-m-obs').value=r.obs||'';
+  document.getElementById('as-m-status').textContent='';
+  assidRenderAnexos();
+  document.getElementById('modal-assid').classList.add('open');
+};
+function assidRenderAnexos(){
+  document.getElementById('as-m-anexos').innerHTML=ASSID_MODAL.anexos.map((a,i)=>`<div class="attach-item" style="display:flex;align-items:center;gap:8px;font-size:0.8rem">
+    <a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:var(--gold2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 ${esc(a.name)}</a>
+    <span style="color:var(--muted)">${fmtSize(a.size)}</span>
+    <button class="attach-del" onclick="assidRemoverAnexo(${i})" title="Remover">✕</button></div>`).join('');
+}
+window.assidRemoverAnexo=i=>{ ASSID_MODAL.anexos.splice(i,1); assidRenderAnexos(); };
+window.assidUpload=async input=>{
+  const files=[...input.files]; input.value=''; if(!files.length||!ASSID_MODAL)return;
+  const st=document.getElementById('as-m-status');
+  for(const file of files){
+    if(file.size>15*1048576){ showToast(`"${file.name}" passa de 15MB.`,false); continue; }
+    st.textContent=`Enviando "${file.name}"...`;
+    const path=`assiduidade/${ASSID_MODAL.vid}/${crypto.randomUUID()}_${sanitizeFileName(file.name)}`;
+    const { error } = await sbCrm.storage.from(ANEXOS_BUCKET).upload(path,file,{upsert:false});
+    if(error){ showToast('Erro no upload: '+error.message,false); continue; }
+    const { data:pub } = sbCrm.storage.from(ANEXOS_BUCKET).getPublicUrl(path);
+    ASSID_MODAL.anexos.push({name:file.name,url:pub.publicUrl,size:file.size,uploadedAt:new Date().toISOString(),uploadedByName:cp?.nome});
+    assidRenderAnexos();
+  }
+  st.textContent='';
+};
+window.assidSalvarDetalhes=async()=>{
+  const obs=document.getElementById('as-m-obs').value.trim();
+  const { error } = await sbCrm.rpc('assiduidade_detalhes',{p_caller_id:cp.id,p_data:document.getElementById('as-data').value,p_vendedor_id:ASSID_MODAL.vid,p_obs:obs,p_anexos:ASSID_MODAL.anexos});
+  if(error){ showToast('Erro: '+error.message,false); return; }
+  const r=ASSID.find(x=>x.vendedor_id===ASSID_MODAL.vid); if(r){ r.obs=obs||null; r.anexos=ASSID_MODAL.anexos; }
+  closeModal('modal-assid'); renderAssiduidade(); showToast('Salvo.');
 };
 
 // ── RESPOSTAS ─────────────────────────────────────────────────────────────────
