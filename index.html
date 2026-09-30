@@ -510,6 +510,7 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
             <input type="date" id="as-data" onchange="carregarAssiduidade()"/>
             <button class="btn-cancel" onclick="assidMoverDia(1)">›</button>
             <button class="btn-cancel" onclick="assidHoje()">Hoje</button>
+            <button class="btn-cancel" id="as-cfg-btn" style="display:none" onclick="assidAbrirConfig()">⚙ Equipes e vendedores</button>
             <div class="as-sum" id="as-sum"></div>
           </div>
           <div id="as-lista"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
@@ -726,6 +727,20 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
 </div>
 
 <!-- MODAL USUÁRIO (admin) -->
+<div class="moverlay" id="modal-assid-cfg">
+  <div class="modal" style="max-width:520px">
+    <div class="mhead"><div class="mhead-l"><span>⚙</span><h3>Quem entra na Assiduidade</h3></div><button class="mclose" onclick="closeModal('modal-assid-cfg')">✕</button></div>
+    <div class="mbody">
+      <div style="font-size:0.78rem;color:var(--muted2);margin-bottom:0.7rem">Marque a equipe inteira ou escolha vendedor por vendedor.</div>
+      <div id="as-cfg-lista"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn-cancel" onclick="closeModal('modal-assid-cfg')">Cancelar</button>
+      <button class="btn-submit" onclick="assidSalvarConfig()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div class="moverlay" id="modal-assid">
   <div class="modal" style="max-width:460px">
     <div class="mhead"><div class="mhead-l"><span>📎</span><h3 id="as-m-titulo">Falta</h3></div><button class="mclose" onclick="closeModal('modal-assid')">✕</button></div>
@@ -1646,7 +1661,35 @@ window.apagarUsuarioDemandas=async(id,nome)=>{
 // esconder o menu aqui é só conveniência.
 let ASSID=[],ASSID_MODAL=null;
 const assidHojeStr=()=>new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+let ASSID_CFG=[];
+window.assidAbrirConfig=async()=>{
+  document.getElementById('modal-assid-cfg').classList.add('open');
+  const { data, error } = await sbCrm.rpc('assiduidade_config_ler',{p_caller_id:cp.id});
+  if(error){ document.getElementById('as-cfg-lista').innerHTML=`<div class="loading" style="color:var(--red)">${esc(error.message)}</div>`; return; }
+  ASSID_CFG=data||[];
+  const eqs=[...new Set(ASSID_CFG.map(r=>r.equipe_id))];
+  document.getElementById('as-cfg-lista').innerHTML=eqs.map(id=>{
+    const rs=ASSID_CFG.filter(r=>r.equipe_id===id);
+    return `<div style="margin-bottom:0.9rem"><label style="display:flex;align-items:center;gap:8px;font-weight:600;color:var(--gold2);cursor:pointer"><input type="checkbox" class="as-cfg-eq" data-id="${id}" ${rs[0].equipe_habilitada?'checked':''} onchange="assidCfgEquipe(this)" style="accent-color:var(--gold)"/> Equipe ${esc(rs[0].equipe)}</label>
+      <div style="padding-left:26px;display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-top:6px">${rs.map(r=>`<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer"><input type="checkbox" class="as-cfg-v" data-eq="${id}" data-id="${r.vendedor_id}" ${r.incluido?'checked':''} style="accent-color:var(--gold)"/>${esc(r.nome)}</label>`).join('')}</div></div>`;
+  }).join('');
+};
+window.assidCfgEquipe=el=>{ document.querySelectorAll(`.as-cfg-v[data-eq="${el.dataset.id}"]`).forEach(c=>c.checked=el.checked); };
+window.assidSalvarConfig=async()=>{
+  const equipes=[],incluir=[],excluir=[];
+  document.querySelectorAll('.as-cfg-eq').forEach(e=>{
+    const on=e.checked; if(on)equipes.push(e.dataset.id);
+    document.querySelectorAll(`.as-cfg-v[data-eq="${e.dataset.id}"]`).forEach(v=>{
+      if(on&&!v.checked)excluir.push(v.dataset.id);
+      if(!on&&v.checked)incluir.push(v.dataset.id);
+    });
+  });
+  const { error } = await sbCrm.rpc('assiduidade_config_salvar',{p_caller_id:cp.id,p_equipes:equipes,p_incluir:incluir,p_excluir:excluir});
+  if(error){ showToast('Erro: '+error.message,false); return; }
+  closeModal('modal-assid-cfg'); showToast('Configuração salva.'); carregarAssiduidade();
+};
 function iniciarAssiduidade(){
+  document.getElementById('as-cfg-btn').style.display=isAdmin()?'':'none';
   const el=document.getElementById('as-data');
   if(!el.value) el.value=assidHojeStr();
   el.max=assidHojeStr();
