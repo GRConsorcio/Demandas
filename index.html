@@ -141,6 +141,9 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
 .badge-aguardando{background:rgba(251,191,36,0.12);color:#fbbf24;}
 .btn-view{padding:0.28rem 0.7rem;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted2);font-family:"Inter",sans-serif;font-size:0.73rem;cursor:pointer;transition:all 0.2s;white-space:nowrap;}
 .btn-view:hover{border-color:var(--gold3);color:var(--gold2);}
+@keyframes alertaPisca{0%,100%{border-color:#f87171;box-shadow:0 0 0 0 rgba(248,113,113,.65)}50%{border-color:#fbbf24;box-shadow:0 0 34px 10px rgba(248,113,113,.55)}}
+@keyframes alertaTexto{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){#alerta-box,#alerta-topo{animation:none!important}}
 .as-eq{font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;padding:0.9rem 0.2rem 0.4rem;display:flex;align-items:center;gap:8px}
 .as-eq b{color:var(--gold2);font-weight:600}
 .as-row{display:flex;align-items:center;gap:10px;padding:0.55rem 0.9rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.4rem;transition:border-color .15s,background .15s}
@@ -517,7 +520,8 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
           <div id="as-lista"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
         </div>
         <div id="view-admin" style="display:none">
-          <div style="display:flex;justify-content:flex-end;margin-bottom:0.9rem">
+          <div style="display:flex;justify-content:flex-end;gap:.6rem;margin-bottom:0.9rem">
+            <button class="btn-cancel" onclick="abrirResponsaveisSetor()">🔔 Responsáveis por departamento</button>
             <button class="btn-new" onclick="abrirNovoUsuarioDemandas()"><svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" stroke-width="3" stroke-linecap="round"/></svg><span>Novo usuário</span></button>
           </div>
           <div class="tw">
@@ -700,6 +704,21 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
 
 <div id="toast"></div>
 
+<div id="alerta-chamado" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.72);align-items:center;justify-content:center;padding:1rem">
+  <div id="alerta-box" style="width:min(520px,100%);background:#141414;border:3px solid var(--red);border-radius:14px;padding:1.3rem 1.4rem;box-shadow:0 0 0 0 rgba(248,113,113,.7);animation:alertaPisca 1s infinite">
+    <div id="alerta-topo" style="display:flex;align-items:center;gap:10px;margin-bottom:.7rem;animation:alertaTexto 1s infinite">
+      <span style="font-size:1.6rem">🚨</span>
+      <div><div style="font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--red)">Novo chamado para o seu departamento</div><div id="alerta-num" style="font-size:.78rem;color:var(--muted2)"></div></div>
+    </div>
+    <div id="alerta-assunto" style="font-size:1.15rem;font-weight:700;color:#fff;margin-bottom:.5rem;word-break:break-word"></div>
+    <div id="alerta-meta" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:.6rem"></div>
+    <div id="alerta-desc" style="font-size:.85rem;color:var(--muted2);max-height:110px;overflow:auto;margin-bottom:1rem;white-space:pre-wrap;word-break:break-word"></div>
+    <div style="display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn-cancel" onclick="fecharAlertaChamado()">Fechar</button>
+      <button class="btn-submit" id="alerta-abrir">Abrir chamado</button>
+    </div>
+  </div>
+</div>
 <div id="notif-banner" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#1a1200,#2a1e00);border-bottom:2px solid var(--gold3);padding:0.6rem 1.4rem;display:none;align-items:center;gap:0.9rem;animation:slideDown 0.3s ease;">
   <span>🔔</span>
   <span id="notif-text" style="flex:1;font-size:0.83rem;color:var(--gold2)"></span>
@@ -728,6 +747,17 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
 </div>
 
 <!-- MODAL USUÁRIO (admin) -->
+<div class="moverlay" id="modal-resp">
+  <div class="modal" style="max-width:560px">
+    <div class="mhead"><div class="mhead-l"><span>🔔</span><h3>Quem recebe o alerta de cada departamento</h3></div><button class="mclose" onclick="closeModal('modal-resp')">✕</button></div>
+    <div class="mbody">
+      <div style="font-size:.78rem;color:var(--muted2);margin-bottom:.8rem">Quando abrirem um chamado para um departamento, as pessoas marcadas nele veem um pop-up piscando na tela, com som. Pode marcar mais de uma pessoa por departamento. Salva na hora.</div>
+      <div id="resp-lista"></div>
+    </div>
+    <div class="mfoot"><button class="btn-submit" onclick="closeModal('modal-resp')">Concluir</button></div>
+  </div>
+</div>
+
 <div class="moverlay" id="modal-assid-cfg">
   <div class="modal" style="max-width:520px">
     <div class="mhead"><div class="mhead-l"><span>⚙</span><h3>Quem entra na Assiduidade</h3></div><button class="mclose" onclick="closeModal('modal-assid-cfg')">✕</button></div>
@@ -881,6 +911,7 @@ const STATUS_LABEL={aberta:'Aberto','em_andamento':'Em andamento',aguardando:'Ag
 // do DemandasGR original (SUPER_ADMIN_DELETE_ABERTO), preservada tal como era.
 const SUPER_ADMIN_DELETE_ABERTA="rafaelsilvamessias9@gmail.com";
 
+let MEUS_SETORES=new Set(); // setores pelos quais este usuário é o responsável (recebe o pop-up de chamado novo)
 let cu=null,cp=null,tickets=[],cFilter="todos",cView="dashboard",vTicketId=null,SETORES=[],USUARIO_OPERACIONAL=null;
 const uOrd={critico:0,alto:1,medio:2,baixo:3};
 const uClr={critico:"#f87171",alto:"#fb923c",medio:"#fbbf24",baixo:"#4ade80"};
@@ -944,6 +975,7 @@ async function iniciarSessao(row){
   USUARIO_OPERACIONAL = (usuarioOp && usuarioOp.ativo) ? usuarioOp : null;
   document.getElementById("login-loading").classList.remove("show");
   await carregarSetores();
+  { const { data:ms } = await sbCrm.rpc('demandas_meus_setores',{p_caller_id:row.id}); MEUS_SETORES=new Set((ms||[]).map(x=>x.setor_id)); }
   showApp();
   loadTickets();
   checkCursosObrigatoriosDemandas();
@@ -1006,7 +1038,10 @@ function loadTickets(){
       if(payload.eventType==='INSERT'){
         const t=payload.new;
         const mine=(t.solicitante_email||'').toLowerCase()===(cu?.email||'').toLowerCase();
-        showNotifBanner(t,mine);sendBrowserNotif(t,mine);playNotifSound();
+        // Responsável pelo departamento de destino: pop-up piscando + som repetido até fechar.
+        // Quem abriu o próprio chamado não é alertado (só recebe o aviso simples).
+        if(!mine&&t.setor_destino_id&&MEUS_SETORES.has(t.setor_destino_id)){ mostrarAlertaChamado(t); sendBrowserNotif(t,false); }
+        else{ showNotifBanner(t,mine);sendBrowserNotif(t,mine);playNotifSound(); }
       }
       refreshTickets(false);
       if(vTicketId===payload.new?.id||vTicketId===payload.old?.id) refreshModalFromServer(vTicketId);
@@ -1498,6 +1533,79 @@ document.getElementById("attach-file-input").addEventListener("change",async e=>
   for(const f of e.target.files)await uploadFile(f);
   e.target.value="";
 });
+
+// ── ALERTA DE CHAMADO NOVO PARA O RESPONSÁVEL DO DEPARTAMENTO ────────────────
+// Pop-up que pisca, com sirene repetida até alguém fechar/abrir. O som respeita o botão "Som" do topo.
+// Limite dos navegadores: som só toca depois que a pessoa clicou em algo na página (regra de autoplay).
+let _alertaTimer=null,_alertaTitulo=null,_alertaFila=[],_alertaAudio=null;
+function tocarSirene(){
+  if(!soundEnabled)return;
+  try{
+    _alertaAudio=_alertaAudio||new(window.AudioContext||window.webkitAudioContext)();
+    const ctx=_alertaAudio; if(ctx.state==='suspended')ctx.resume();
+    [[0,988,.16],[.2,740,.16],[.4,988,.16],[.6,740,.2]].forEach(([w,f,d])=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);
+      o.type='square';o.frequency.setValueAtTime(f,ctx.currentTime+w);
+      g.gain.setValueAtTime(0,ctx.currentTime+w);
+      g.gain.linearRampToValueAtTime(.22,ctx.currentTime+w+.02);
+      g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+w+d);
+      o.start(ctx.currentTime+w);o.stop(ctx.currentTime+w+d+.02);
+    });
+  }catch(e){}
+}
+function mostrarAlertaChamado(t){
+  _alertaFila.push(t);
+  if(document.getElementById('alerta-chamado').style.display==='flex')return; // já tem um aberto; entra na fila
+  proximoAlertaChamado();
+}
+function proximoAlertaChamado(){
+  const t=_alertaFila.shift(); if(!t){ fecharAlertaChamado(true); return; }
+  const setor=SETORES.find(s=>s.id===t.setor_destino_id)?.nome||'';
+  const origem=SETORES.find(s=>s.id===t.setor_origem_id)?.nome||'';
+  const urg=PRIORIDADE_TO_URG[t.prioridade]||'medio';
+  document.getElementById('alerta-num').textContent=numFmt(t.numero)+(setor?' · '+setor:'')+(_alertaFila.length?` · +${_alertaFila.length} na fila`:'');
+  document.getElementById('alerta-assunto').textContent=t.assunto||'(sem assunto)';
+  document.getElementById('alerta-meta').innerHTML=
+    `<span class="badge badge-${urg}">${cap(urg)}</span>`+
+    (t.categoria?`<span class="badge" style="background:rgba(255,255,255,.08);color:var(--muted2)">${esc(t.categoria)}</span>`:'')+
+    `<span class="badge" style="background:rgba(255,255,255,.08);color:var(--muted2)">${esc(t.solicitante_email||'')}${origem?' · '+esc(origem):''}</span>`;
+  document.getElementById('alerta-desc').textContent=t.descricao||'';
+  document.getElementById('alerta-abrir').onclick=()=>{ const id=t.id; fecharAlertaChamado(); setView('todos',document.querySelectorAll('.nav-item')[1]); setTimeout(()=>viewTicket(id),300); };
+  document.getElementById('alerta-chamado').style.display='flex';
+  clearInterval(_alertaTimer); tocarSirene(); _alertaTimer=setInterval(tocarSirene,2600);
+  // título da aba piscando (chama atenção mesmo com o Demandas em segundo plano)
+  if(_alertaTitulo===null){ _alertaTitulo=document.title; let on=false; window._alertaTitleTimer=setInterval(()=>{ on=!on; document.title=on?'🚨 NOVO CHAMADO!':_alertaTitulo; },900); }
+}
+window.fecharAlertaChamado=(fimDaFila)=>{
+  if(fimDaFila!==true&&_alertaFila.length){ proximoAlertaChamado(); return; }
+  clearInterval(_alertaTimer); _alertaTimer=null;
+  document.getElementById('alerta-chamado').style.display='none';
+  if(_alertaTitulo!==null){ clearInterval(window._alertaTitleTimer); document.title=_alertaTitulo; _alertaTitulo=null; }
+};
+
+// ── ADMIN: quem recebe o alerta de cada departamento ─────────────────────────
+window.abrirResponsaveisSetor=async()=>{
+  document.getElementById('modal-resp').classList.add('open');
+  const box=document.getElementById('resp-lista'); box.innerHTML='<div class="loading"><div class="spinner"></div></div>';
+  const [{data:us},{data:rs,error}]=await Promise.all([
+    sbCrm.from('demandas_usuarios_publica').select('id,nome').eq('ativo',true).order('nome'),
+    sbCrm.rpc('demandas_responsaveis_ler',{p_caller_id:cp.id})
+  ]);
+  if(error){ box.innerHTML=`<div class="loading" style="color:var(--red)">${esc(error.message)}</div>`; return; }
+  box.innerHTML=SETORES.map(s=>{
+    const marcados=new Set((rs||[]).filter(r=>r.setor_id===s.id).map(r=>r.usuario_id));
+    return `<div style="margin-bottom:.9rem"><div style="font-weight:600;color:var(--gold2);margin-bottom:4px">${esc(s.nome)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px">${(us||[]).map(u=>`<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer"><input type="checkbox" data-setor="${s.id}" ${marcados.has(u.id)?'checked':''} onchange="salvarResponsaveisSetor('${s.id}')" value="${u.id}" style="accent-color:var(--gold)"/>${esc(u.nome)}</label>`).join('')}</div></div>`;
+  }).join('');
+};
+window.salvarResponsaveisSetor=async setorId=>{
+  const ids=[...document.querySelectorAll(`#resp-lista input[data-setor="${setorId}"]:checked`)].map(i=>i.value);
+  const { error } = await sbCrm.rpc('demandas_responsaveis_salvar',{p_caller_id:cp.id,p_setor_id:setorId,p_usuarios:ids});
+  if(error){ showToast('Erro: '+error.message,false); return; }
+  showToast('Responsáveis salvos.');
+  if(ids.includes(cp.id)) MEUS_SETORES.add(setorId); else MEUS_SETORES.delete(setorId);
+};
 
 // ── NOTIFICAÇÕES / SOM — portado 1:1 do DemandasGR ──────────────────────────
 function showNotifBanner(t,mine){
