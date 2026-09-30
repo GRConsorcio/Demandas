@@ -1043,6 +1043,8 @@ function loadTickets(){
         if(!mine&&t.setor_destino_id&&MEUS_SETORES.has(t.setor_destino_id)){ mostrarAlertaChamado(t); sendBrowserNotif(t,false); }
         else{ showNotifBanner(t,mine);sendBrowserNotif(t,mine);playNotifSound(); }
       }
+      // Demanda concluída/cancelada por qualquer pessoa: para a sirene e tira o pop-up dela na hora
+      if(payload.eventType==='UPDATE') pararAlertaSeEncerrado(payload.new);
       refreshTickets(false);
       if(vTicketId===payload.new?.id||vTicketId===payload.old?.id) refreshModalFromServer(vTicketId);
     })
@@ -1537,7 +1539,18 @@ document.getElementById("attach-file-input").addEventListener("change",async e=>
 // ── ALERTA DE CHAMADO NOVO PARA O RESPONSÁVEL DO DEPARTAMENTO ────────────────
 // Pop-up que pisca, com sirene repetida até alguém fechar/abrir. O som respeita o botão "Som" do topo.
 // Limite dos navegadores: som só toca depois que a pessoa clicou em algo na página (regra de autoplay).
-let _alertaTimer=null,_alertaTitulo=null,_alertaFila=[],_alertaAudio=null;
+let _alertaTimer=null,_alertaTitulo=null,_alertaFila=[],_alertaAudio=null,_alertaAtual=null;
+// Chamado que já foi concluído (ou cancelado) não precisa mais de barulho: sai da fila e, se for o que está
+// tocando agora, fecha o pop-up (passa pro próximo da fila, se houver) e a sirene para.
+function pararAlertaSeEncerrado(t){
+  if(!t||!['concluida','cancelada'].includes(t.status))return;
+  _alertaFila=_alertaFila.filter(x=>x.id!==t.id);
+  if(_alertaAtual&&_alertaAtual.id===t.id&&document.getElementById('alerta-chamado').style.display==='flex'){
+    _alertaAtual=null;
+    fecharAlertaChamado();
+    showToast(`Chamado ${numFmt(t.numero)} ${t.status==='concluida'?'concluído':'cancelado'} — alerta encerrado.`);
+  }
+}
 function tocarSirene(){
   if(!soundEnabled)return;
   try{
@@ -1561,6 +1574,7 @@ function mostrarAlertaChamado(t){
 }
 function proximoAlertaChamado(){
   const t=_alertaFila.shift(); if(!t){ fecharAlertaChamado(true); return; }
+  _alertaAtual=t;
   const setor=SETORES.find(s=>s.id===t.setor_destino_id)?.nome||'';
   const origem=SETORES.find(s=>s.id===t.setor_origem_id)?.nome||'';
   const urg=PRIORIDADE_TO_URG[t.prioridade]||'medio';
@@ -1579,7 +1593,7 @@ function proximoAlertaChamado(){
 }
 window.fecharAlertaChamado=(fimDaFila)=>{
   if(fimDaFila!==true&&_alertaFila.length){ proximoAlertaChamado(); return; }
-  clearInterval(_alertaTimer); _alertaTimer=null;
+  clearInterval(_alertaTimer); _alertaTimer=null; _alertaAtual=null;
   document.getElementById('alerta-chamado').style.display='none';
   if(_alertaTitulo!==null){ clearInterval(window._alertaTitleTimer); document.title=_alertaTitulo; _alertaTitulo=null; }
 };
