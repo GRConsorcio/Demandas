@@ -514,6 +514,8 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
             <button class="btn-cancel" onclick="assidMoverDia(1)">›</button>
             <button class="btn-cancel" onclick="assidHoje()">Hoje</button>
             <button class="btn-cancel" onclick="assidImprimir()" title="Imprimir o relatório do dia com todos os anexos">🖨 Relatório do dia</button>
+            <button class="btn-cancel" onclick="assidImprimirPeriodo('semana')" title="Semana (segunda a domingo) da data selecionada">🖨 Relatório da semana</button>
+            <button class="btn-cancel" onclick="assidImprimirPeriodo('mes')" title="Mês inteiro da data selecionada">🖨 Relatório do mês</button>
             <button class="btn-cancel" id="as-cfg-btn" style="display:none" onclick="assidAbrirConfig()">⚙ Equipes e vendedores</button>
             <div class="as-sum" id="as-sum"></div>
           </div>
@@ -1903,6 +1905,9 @@ window.assidImprimir=async()=>{
   <h1>Relatório de Assiduidade</h1><div class="sub">${escH(dataFmt)}</div>
   <div class="res"><span><b class="ok">${pres}</b> vieram</span><span><b class="no">${falt}</b> faltaram</span><span><b>${ASSID.length-pres-falt}</b> sem marcação</span><span><b>${ASSID.length}</b> no total</span></div>
   ${corpo}<div class="rod">Emitido em ${escH(new Date().toLocaleString('pt-BR'))} por ${escH(cp?.nome||'')} — Demandas GR</div></body></html>`;
+  assidAbrirImpressao(html);
+};
+function assidAbrirImpressao(html){
   const fr=document.createElement('iframe');
   fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';
   document.body.appendChild(fr);
@@ -1914,6 +1919,104 @@ window.assidImprimir=async()=>{
     fr.contentWindow.focus(); fr.contentWindow.print();
     setTimeout(()=>fr.remove(),60000);
   };
+}
+
+// ── Relatórios da SEMANA e do MÊS ────────────────────────────────────────────
+// O banco lista um dia por chamada (assiduidade_listar), então buscamos cada dia do período
+// (6 chamadas por vez) e juntamos aqui. Mesmas permissões do relatório do dia; nada muda no banco.
+// Regra: dia em que ninguém foi marcado conta como "sem expediente" (domingo, feriado) e fica fora das contas.
+const assidISO=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+function assidPeriodo(tipo,ref){
+  const d=new Date(ref+'T12:00:00');
+  let ini,fim;
+  if(tipo==='semana'){ ini=new Date(d); ini.setDate(d.getDate()-(d.getDay()+6)%7); fim=new Date(ini); fim.setDate(ini.getDate()+6); }
+  else { ini=new Date(d.getFullYear(),d.getMonth(),1,12); fim=new Date(d.getFullYear(),d.getMonth()+1,0,12); }
+  const hoje=assidHojeStr(), dias=[];
+  for(const c=new Date(ini); assidISO(c)<=assidISO(fim)&&assidISO(c)<=hoje; c.setDate(c.getDate()+1)) dias.push(assidISO(c));
+  return {ini:assidISO(ini),fim:assidISO(fim),dias};
+}
+async function assidBuscarDias(dias){
+  const out={};
+  for(let i=0;i<dias.length;i+=6){
+    const lote=dias.slice(i,i+6);
+    const res=await Promise.all(lote.map(dia=>sbCrm.rpc('assiduidade_listar',{p_caller_id:cp.id,p_data:dia})));
+    res.forEach((r,k)=>{ if(r.error) throw r.error; out[lote[k]]=r.data||[]; });
+  }
+  return out;
+}
+function assidHtmlPeriodo(tipo,ini,fim,dias,porDia){
+  const escH=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const SEM=['dom','seg','ter','qua','qui','sex','sáb'];
+  const dt=s=>new Date(s+'T12:00:00');
+  const ddmm=s=>dt(s).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  const comExpediente=new Set(dias.filter(d=>(porDia[d]||[]).some(r=>r.status)));
+  // junta o mesmo vendedor de todos os dias (nome e equipe do dia mais recente)
+  const vend=new Map();
+  dias.forEach(d=>(porDia[d]||[]).forEach(r=>{
+    const v=vend.get(r.vendedor_id)||{nome:r.nome,equipe:r.equipe,dias:{}};
+    v.nome=r.nome; v.equipe=r.equipe; v.dias[d]=r; vend.set(r.vendedor_id,v);
+  }));
+  const lista=[...vend.values()].sort((a,b)=>String(a.equipe||'').localeCompare(String(b.equipe||''),'pt-BR')||String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR'));
+  const conta=v=>{ const c={p:0,f:0,s:0}; dias.forEach(d=>{ const r=v.dias[d]; if(!r||!comExpediente.has(d))return; r.status==='presente'?c.p++:r.status==='faltou'?c.f++:c.s++; }); return c; };
+  const pct=c=>c.p+c.f?Math.round(c.p*100/(c.p+c.f))+'%':'–';
+  const tot={p:0,f:0,s:0};
+  const cab=dias.map(d=>`<th class="d${comExpediente.has(d)?'':' off'}">${tipo==='mes'?dt(d).getDate()+'<br><span class="ds">'+SEM[dt(d).getDay()]+'</span>':SEM[dt(d).getDay()]+'<br>'+ddmm(d)}</th>`).join('');
+  const linhaTot=(rot,c)=>`<tr class="tot"><td>${rot}</td>${dias.map(d=>`<td class="d${comExpediente.has(d)?'':' off'}"></td>`).join('')}<td class="n ok">${c.p}</td><td class="n no">${c.f}</td><td class="n">${c.s}</td><td class="n">${pct(c)}</td></tr>`;
+  let eq=null, sub=null, corpo='';
+  lista.forEach(v=>{
+    if(v.equipe!==eq){
+      if(eq!==null) corpo+=linhaTot('Total da equipe',sub)+'</tbody></table></div>';
+      eq=v.equipe; sub={p:0,f:0,s:0};
+      corpo+=`<h2>Equipe ${escH(eq||'—')}</h2><div class="tw"><table><thead><tr><th class="nome">Vendedor</th>${cab}<th class="n">Veio</th><th class="n">Faltou</th><th class="n">Sem marc.</th><th class="n">Assid.</th></tr></thead><tbody>`;
+    }
+    const c=conta(v); ['p','f','s'].forEach(k=>{ sub[k]+=c[k]; tot[k]+=c[k]; });
+    const cel=d=>{ const r=v.dias[d];
+      if(!comExpediente.has(d)) return `<td class="d off"></td>`;
+      if(!r) return `<td class="d fora" title="fora da lista nesse dia"></td>`;
+      return r.status==='presente'?`<td class="d ok">✔</td>`:r.status==='faltou'?`<td class="d no">✘</td>`:`<td class="d nm">·</td>`; };
+    corpo+=`<tr><td class="nome">${escH(v.nome)}</td>${dias.map(cel).join('')}<td class="n ok">${c.p}</td><td class="n no">${c.f}</td><td class="n">${c.s}</td><td class="n"><b>${pct(c)}</b></td></tr>`;
+  });
+  if(eq!==null) corpo+=linhaTot('Total da equipe',sub)+'</tbody></table></div>';
+  // faltas e registros com observação ou anexo, em ordem de data
+  const ocorr=[];
+  lista.forEach(v=>dias.forEach(d=>{ const r=v.dias[d]; if(r&&(r.status==='faltou'||r.obs||(r.anexos||[]).length)) ocorr.push({d,v,r}); }));
+  ocorr.sort((a,b)=>a.d.localeCompare(b.d)||String(a.v.nome).localeCompare(String(b.v.nome),'pt-BR'));
+  const ocHtml=ocorr.length?`<h2>Faltas e registros com observação ou anexo</h2><table class="oc"><thead><tr><th style="width:11%">Data</th><th style="width:24%">Vendedor</th><th style="width:14%">Equipe</th><th style="width:11%">Situação</th><th>Observação e anexos</th></tr></thead><tbody>${ocorr.map(({d,v,r})=>`<tr>
+    <td>${escH(SEM[dt(d).getDay()])} ${escH(ddmm(d))}</td><td>${escH(v.nome)}</td><td>${escH(v.equipe||'—')}</td>
+    <td>${r.status==='presente'?'<b class="ok">✔ Veio</b>':r.status==='faltou'?'<b class="no">✘ Faltou</b>':'<span class="nm">Sem marcação</span>'}</td>
+    <td>${r.obs?'<div class="obs">'+escH(r.obs)+'</div>':''}${(r.anexos||[]).map(a=>`<div class="cap">📄 <a href="${escH(a.url)}">${escH(a.name)}</a></div>`).join('')||(r.obs?'':'<span class="nm">Sem observação nem anexo</span>')}</td></tr>`).join('')}</tbody></table>`:'<p class="nm">Nenhuma falta registrada no período.</p>';
+  const titulo=tipo==='semana'?'Relatório semanal de Assiduidade':'Relatório mensal de Assiduidade';
+  let periodo=tipo==='semana'?`Semana de ${ddmm(ini)} a ${dt(fim).toLocaleDateString('pt-BR')}`:dt(ini).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  periodo=periodo.charAt(0).toUpperCase()+periodo.slice(1);
+  const parcial=dias[dias.length-1]<fim?` · parcial, até ${ddmm(dias[dias.length-1])}`:'';
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Assiduidade ${tipo==='semana'?'semana '+ini:ini.slice(0,7)}</title><style>
+  *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:20px;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  h1{font-size:19px;margin:0 0 2px}.sub{color:#555;margin-bottom:8px}
+  .res{display:flex;flex-wrap:wrap;gap:16px;margin:6px 0 12px;font-size:12px}.res b{font-size:15px}
+  h2{font-size:13px;margin:16px 0 6px;padding:4px 8px;background:#eee;border-left:4px solid #b8902b;page-break-after:avoid}
+  table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:4px 5px;vertical-align:middle;text-align:left}th{background:#f6f6f6;font-size:10px}
+  th.d,td.d{text-align:center;padding:3px 1px;font-size:${tipo==='mes'?'9px':'10.5px'};width:${tipo==='mes'?'2.3%':'7%'}}
+  .off{background:#ececec!important;color:#999}.fora{background:repeating-linear-gradient(45deg,#fff,#fff 3px,#eee 3px,#eee 6px)}
+  td.nome{white-space:nowrap;font-size:10.5px}.n{text-align:center;width:${tipo==='mes'?'4.5%':'7%'};white-space:nowrap}
+  tr.tot td{background:#faf6ea;font-weight:bold}.ds{font-size:7.5px;font-weight:normal}tr{page-break-inside:avoid}
+  .ok{color:#137333}.no{color:#c5221f}.nm{color:#888}.cap{color:#444;font-size:10px;word-break:break-all;margin-top:2px}.cap a{color:#444}
+  .obs{font-style:italic}.oc td{vertical-align:top}.leg{color:#666;font-size:10px;margin-top:6px}.rod{margin-top:16px;color:#777;font-size:10px}
+  @page{size:A4 ${tipo==='mes'?'landscape':'portrait'};margin:9mm}@media print{body{margin:0}}</style></head><body>
+  <h1>${titulo}</h1><div class="sub">${escH(periodo+parcial)}</div>
+  <div class="res"><span><b class="ok">${tot.p}</b> presenças</span><span><b class="no">${tot.f}</b> faltas</span><span><b>${tot.s}</b> sem marcação</span><span><b>${pct(tot)}</b> de assiduidade</span><span><b>${comExpediente.size}</b> dia(s) com expediente</span><span><b>${lista.length}</b> vendedor(es)</span></div>
+  ${corpo||'<p class="nm">Nenhum vendedor encontrado no período.</p>'}
+  <div class="leg">✔ veio · ✘ faltou · · sem marcação · coluna cinza = dia sem nenhuma marcação (fora das contas) · listrado = vendedor fora da lista nesse dia. Assiduidade = presenças ÷ (presenças + faltas).</div>
+  ${ocHtml}
+  <div class="rod">Emitido em ${escH(new Date().toLocaleString('pt-BR'))} por ${escH(cp?.nome||'')} — Demandas GR</div></body></html>`;
+}
+window.assidImprimirPeriodo=async tipo=>{
+  const ref=document.getElementById('as-data').value||assidHojeStr();
+  const {ini,fim,dias}=assidPeriodo(tipo,ref);
+  if(!dias.length){ showToast('Esse período ainda não começou.',false); return; }
+  showToast(`Montando o relatório ${tipo==='semana'?'da semana':'do mês'} (${dias.length} dia(s))...`);
+  let porDia;
+  try{ porDia=await assidBuscarDias(dias); }catch(e){ showToast('Erro: '+(e?.message||e),false); return; }
+  assidAbrirImpressao(assidHtmlPeriodo(tipo,ini,fim,dias,porDia));
 };
 window.assidHoje=()=>{document.getElementById('as-data').value=assidHojeStr();carregarAssiduidade();};
 window.assidMoverDia=n=>{
