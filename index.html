@@ -392,6 +392,10 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 11l3 3 8-8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9" stroke-width="1.5" stroke-linecap="round"/></svg>
         Assiduidade
       </button>
+      <button class="nav-item" id="nav-relassid-btn" style="display:none" onclick="setView('relassid',this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z" stroke-width="1.5" stroke-linejoin="round"/><path d="M14 3v5h5M10 13h6M10 17h6" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Relatórios de Assiduidade
+      </button>
       <div class="nav-sec">Conta</div>
       <button class="nav-item" onclick="setView('perfil',this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -520,6 +524,28 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
             <div class="as-sum" id="as-sum"></div>
           </div>
           <div id="as-lista"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
+        </div>
+        <div id="view-relassid" style="display:none">
+          <div class="filters-box">
+            <div class="frow1" id="ra-tipos">
+              <span class="flabel">Tipo:</span>
+              <button class="fbtn" data-t="dia" onclick="relAssidTipo('dia')">Diário</button>
+              <button class="fbtn" data-t="semana" onclick="relAssidTipo('semana')">Semanal</button>
+              <button class="fbtn" data-t="mes" onclick="relAssidTipo('mes')">Mensal</button>
+              <button class="fbtn" data-t="periodo" onclick="relAssidTipo('periodo')">Período</button>
+            </div>
+            <div class="frow2 as-bar" style="margin:0">
+              <span id="ra-ref-box" style="display:flex;align-items:center;gap:.5rem"><span class="flabel">Data:</span><input type="date" id="ra-ref"/></span>
+              <span id="ra-per-box" style="display:none;align-items:center;gap:.5rem"><span class="flabel">De:</span><input type="date" id="ra-de"/><span class="flabel">Até:</span><input type="date" id="ra-ate"/></span>
+              <label style="display:flex;align-items:center;gap:6px;font-size:0.875rem;color:var(--muted2);cursor:pointer"><input type="checkbox" id="ra-semmarc" style="accent-color:var(--gold)"/> Contar "sem marcação" como presença</label>
+              <button class="btn-new" onclick="relAssidGerar()">Gerar relatório</button>
+              <button class="btn-cancel" id="ra-imprimir" onclick="relAssidImprimir()" disabled>🖨 Imprimir / PDF</button>
+              <span id="ra-status" style="color:var(--muted2);font-size:0.8125rem"></span>
+            </div>
+            <div style="font-size:0.8125rem;color:var(--muted);margin-top:0.6rem">Semanal = segunda a domingo da data escolhida · Mensal = mês inteiro da data escolhida · Período = de/até livre (máx. 93 dias). Dias sem nenhuma marcação (domingo, feriado) ficam fora das contas.</div>
+          </div>
+          <div id="ra-vazio" class="tw" style="padding:2rem;text-align:center;color:var(--muted2);font-size:0.875rem">Escolha o tipo e a data e clique em <b style="color:var(--gold2)">Gerar relatório</b>.</div>
+          <div id="ra-box" style="display:none;background:#fff;border-radius:var(--radius-lg);overflow:hidden"><iframe id="ra-frame" title="Relatório de Assiduidade" style="width:100%;min-height:420px;border:0;display:block"></iframe></div>
         </div>
         <div id="view-admin" style="display:none">
           <div style="display:flex;justify-content:flex-end;gap:.6rem;margin-bottom:0.9rem">
@@ -1027,6 +1053,7 @@ function showApp(){
   document.getElementById('nav-sec-admin').style.display = cp?.is_admin?'':'none';
   document.getElementById('nav-admin-btn').style.display = cp?.is_admin?'':'none';
   document.getElementById('nav-assid-btn').style.display = podeAssiduidade()?'':'none';
+  document.getElementById('nav-relassid-btn').style.display = podeAssiduidade()?'':'none';
 }
 
 // ── TICKETS (realtime via Supabase, equivalente ao onSnapshot do Firestore) ──
@@ -1138,15 +1165,17 @@ window.setView=(v,el)=>{
   cView=v;closeSidebar();
   document.querySelectorAll(".nav-item").forEach(b=>b.classList.remove("active"));
   if(el)el.classList.add("active");
-  const t={dashboard:["Dashboard","Visão geral dos chamados"],todos:["Todos os Chamados","Fila de prioridade geral"],meus:["Meus Chamados","Chamados abertos por mim"],perfil:["Meu Perfil","Informações da conta"],assiduidade:["Assiduidade","Quem veio trabalhar"],admin:["Usuários","Gerenciar quem usa o Demandas"]};
+  const t={dashboard:["Dashboard","Visão geral dos chamados"],todos:["Todos os Chamados","Fila de prioridade geral"],meus:["Meus Chamados","Chamados abertos por mim"],perfil:["Meu Perfil","Informações da conta"],assiduidade:["Assiduidade","Quem veio trabalhar"],relassid:["Relatórios de Assiduidade","Diário, semanal, mensal ou por período"],admin:["Usuários","Gerenciar quem usa o Demandas"]};
   document.getElementById("view-title").textContent=t[v]?.[0]||v;
   document.getElementById("view-sub").textContent=t[v]?.[1]||"";
-  document.getElementById("view-tickets").style.display=(v!=="perfil"&&v!=="admin"&&v!=="assiduidade")?"block":"none";
+  document.getElementById("view-tickets").style.display=(v!=="perfil"&&v!=="admin"&&v!=="assiduidade"&&v!=="relassid")?"block":"none";
   document.getElementById("view-assiduidade").style.display=v==="assiduidade"?"block":"none";
+  document.getElementById("view-relassid").style.display=v==="relassid"?"block":"none";
   document.getElementById("view-perfil").style.display=v==="perfil"?"block":"none";
   document.getElementById("view-admin").style.display=v==="admin"?"block":"none";
   if(v==="admin")renderAdminUsuariosDemandas();
   else if(v==="assiduidade")iniciarAssiduidade();
+  else if(v==="relassid")iniciarRelAssid();
   else if(v!=="perfil")renderTickets();
 };
 window.goToPerfil=()=>{const btns=document.querySelectorAll(".nav-item");let b=null;btns.forEach(x=>{if(x.textContent.trim().startsWith("Meu Perfil"))b=x;});setView("perfil",b);};
@@ -1944,7 +1973,8 @@ async function assidBuscarDias(dias){
   }
   return out;
 }
-function assidHtmlPeriodo(tipo,ini,fim,dias,porDia){
+function assidHtmlPeriodo(tipo,ini,fim,dias,porDia,opt={}){
+  const SMP=!!opt.semMarcPresenca; // opção: dia sem marcação conta como presença
   const escH=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const SEM=['dom','seg','ter','qua','qui','sex','sáb'];
   const dt=s=>new Date(s+'T12:00:00');
@@ -1957,7 +1987,7 @@ function assidHtmlPeriodo(tipo,ini,fim,dias,porDia){
     v.nome=r.nome; v.equipe=r.equipe; v.dias[d]=r; vend.set(r.vendedor_id,v);
   }));
   const lista=[...vend.values()].sort((a,b)=>String(a.equipe||'').localeCompare(String(b.equipe||''),'pt-BR')||String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR'));
-  const conta=v=>{ const c={p:0,f:0,s:0}; dias.forEach(d=>{ const r=v.dias[d]; if(!r||!comExpediente.has(d))return; r.status==='presente'?c.p++:r.status==='faltou'?c.f++:c.s++; }); return c; };
+  const conta=v=>{ const c={p:0,f:0,s:0}; dias.forEach(d=>{ const r=v.dias[d]; if(!r||!comExpediente.has(d))return; r.status==='presente'?c.p++:r.status==='faltou'?c.f++:(c.s++,SMP&&c.p++); }); return c; };
   const pct=c=>c.p+c.f?Math.round(c.p*100/(c.p+c.f))+'%':'–';
   const tot={p:0,f:0,s:0};
   const cab=dias.map(d=>`<th class="d${comExpediente.has(d)?'':' off'}">${tipo==='mes'?dt(d).getDate()+'<br><span class="ds">'+SEM[dt(d).getDay()]+'</span>':SEM[dt(d).getDay()]+'<br>'+ddmm(d)}</th>`).join('');
@@ -1973,7 +2003,7 @@ function assidHtmlPeriodo(tipo,ini,fim,dias,porDia){
     const cel=d=>{ const r=v.dias[d];
       if(!comExpediente.has(d)) return `<td class="d off"></td>`;
       if(!r) return `<td class="d fora" title="fora da lista nesse dia"></td>`;
-      return r.status==='presente'?`<td class="d ok">✔</td>`:r.status==='faltou'?`<td class="d no">✘</td>`:`<td class="d nm">·</td>`; };
+      return r.status==='presente'?`<td class="d ok">✔</td>`:r.status==='faltou'?`<td class="d no">✘</td>`:(SMP?`<td class="d imp" title="sem marcação, contado como presença">✔</td>`:`<td class="d nm">·</td>`); };
     corpo+=`<tr><td class="nome">${escH(v.nome)}</td>${dias.map(cel).join('')}<td class="n ok">${c.p}</td><td class="n no">${c.f}</td><td class="n">${c.s}</td><td class="n"><b>${pct(c)}</b></td></tr>`;
   });
   if(eq!==null) corpo+=linhaTot('Total da equipe',sub)+'</tbody></table></div>';
@@ -1985,11 +2015,11 @@ function assidHtmlPeriodo(tipo,ini,fim,dias,porDia){
     <td>${escH(SEM[dt(d).getDay()])} ${escH(ddmm(d))}</td><td>${escH(v.nome)}</td><td>${escH(v.equipe||'—')}</td>
     <td>${r.status==='presente'?'<b class="ok">✔ Veio</b>':r.status==='faltou'?'<b class="no">✘ Faltou</b>':'<span class="nm">Sem marcação</span>'}</td>
     <td>${r.obs?'<div class="obs">'+escH(r.obs)+'</div>':''}${(r.anexos||[]).map(a=>`<div class="cap">📄 <a href="${escH(a.url)}">${escH(a.name)}</a></div>`).join('')||(r.obs?'':'<span class="nm">Sem observação nem anexo</span>')}</td></tr>`).join('')}</tbody></table>`:'<p class="nm">Nenhuma falta registrada no período.</p>';
-  const titulo=tipo==='semana'?'Relatório semanal de Assiduidade':'Relatório mensal de Assiduidade';
-  let periodo=tipo==='semana'?`Semana de ${ddmm(ini)} a ${dt(fim).toLocaleDateString('pt-BR')}`:dt(ini).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  const titulo=opt.titulo||(tipo==='semana'?'Relatório semanal de Assiduidade':'Relatório mensal de Assiduidade');
+  let periodo=opt.periodo||(tipo==='semana'?`Semana de ${ddmm(ini)} a ${dt(fim).toLocaleDateString('pt-BR')}`:dt(ini).toLocaleDateString('pt-BR',{month:'long',year:'numeric'}));
   periodo=periodo.charAt(0).toUpperCase()+periodo.slice(1);
   const parcial=dias[dias.length-1]<fim?` · parcial, até ${ddmm(dias[dias.length-1])}`:'';
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Assiduidade ${tipo==='semana'?'semana '+ini:ini.slice(0,7)}</title><style>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${escH(titulo)} ${escH(ini)}${fim!==ini?' a '+escH(fim):''}</title><style>
   *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:20px;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   h1{font-size:19px;margin:0 0 2px}.sub{color:#555;margin-bottom:8px}
   .res{display:flex;flex-wrap:wrap;gap:16px;margin:6px 0 12px;font-size:12px}.res b{font-size:15px}
@@ -1999,16 +2029,61 @@ function assidHtmlPeriodo(tipo,ini,fim,dias,porDia){
   .off{background:#ececec!important;color:#999}.fora{background:repeating-linear-gradient(45deg,#fff,#fff 3px,#eee 3px,#eee 6px)}
   td.nome{white-space:nowrap;font-size:10.5px}.n{text-align:center;width:${tipo==='mes'?'4.5%':'7%'};white-space:nowrap}
   tr.tot td{background:#faf6ea;font-weight:bold}.ds{font-size:7.5px;font-weight:normal}tr{page-break-inside:avoid}
-  .ok{color:#137333}.no{color:#c5221f}.nm{color:#888}.cap{color:#444;font-size:10px;word-break:break-all;margin-top:2px}.cap a{color:#444}
+  .ok{color:#137333}.no{color:#c5221f}.nm{color:#888}.imp{color:#8cbf98}.cap{color:#444;font-size:10px;word-break:break-all;margin-top:2px}.cap a{color:#444}
   .obs{font-style:italic}.oc td{vertical-align:top}.leg{color:#666;font-size:10px;margin-top:6px}.rod{margin-top:16px;color:#777;font-size:10px}
   @page{size:A4 ${tipo==='mes'?'landscape':'portrait'};margin:9mm}@media print{body{margin:0}}</style></head><body>
   <h1>${titulo}</h1><div class="sub">${escH(periodo+parcial)}</div>
-  <div class="res"><span><b class="ok">${tot.p}</b> presenças</span><span><b class="no">${tot.f}</b> faltas</span><span><b>${tot.s}</b> sem marcação</span><span><b>${pct(tot)}</b> de assiduidade</span><span><b>${comExpediente.size}</b> dia(s) com expediente</span><span><b>${lista.length}</b> vendedor(es)</span></div>
+  <div class="res"><span><b class="ok">${tot.p}</b> presenças</span><span><b class="no">${tot.f}</b> faltas</span><span><b>${tot.s}</b> sem marcação${SMP?' (contadas como presença)':''}</span><span><b>${pct(tot)}</b> de assiduidade</span><span><b>${comExpediente.size}</b> dia(s) com expediente</span><span><b>${lista.length}</b> vendedor(es)</span></div>
   ${corpo||'<p class="nm">Nenhum vendedor encontrado no período.</p>'}
-  <div class="leg">✔ veio · ✘ faltou · · sem marcação · coluna cinza = dia sem nenhuma marcação (fora das contas) · listrado = vendedor fora da lista nesse dia. Assiduidade = presenças ÷ (presenças + faltas).</div>
+  <div class="leg">✔ veio · ✘ faltou · · sem marcação · coluna cinza = dia sem nenhuma marcação (fora das contas) · listrado = vendedor fora da lista nesse dia. Assiduidade = presenças ÷ (presenças + faltas).${SMP?' <b>Opção ativa:</b> dia sem marcação conta como presença (✔ claro); a coluna Sem marc. mostra quantos dias foram contados assim.':''}</div>
   ${ocHtml}
   <div class="rod">Emitido em ${escH(new Date().toLocaleString('pt-BR'))} por ${escH(cp?.nome||'')} — Demandas GR</div></body></html>`;
 }
+// ── ABA "Relatórios de Assiduidade": diário, semanal, mensal ou período livre ──
+let REL_TIPO='mes';
+function iniciarRelAssid(){
+  const hoje=assidHojeStr();
+  ['ra-ref','ra-de','ra-ate'].forEach(id=>{ const el=document.getElementById(id); el.max=hoje; if(!el.value) el.value=id==='ra-de'?hoje.slice(0,8)+'01':hoje; });
+  relAssidTipo(REL_TIPO);
+}
+window.relAssidTipo=t=>{
+  REL_TIPO=t;
+  document.querySelectorAll('#ra-tipos .fbtn').forEach(b=>b.classList.toggle('active',b.dataset.t===t));
+  document.getElementById('ra-ref-box').style.display=t==='periodo'?'none':'flex';
+  document.getElementById('ra-per-box').style.display=t==='periodo'?'flex':'none';
+};
+window.relAssidGerar=async()=>{
+  const st=document.getElementById('ra-status'), hoje=assidHojeStr();
+  const dataLonga=s=>new Date(s+'T12:00:00').toLocaleDateString('pt-BR');
+  let ini,fim,dias,titulo,periodo;
+  if(REL_TIPO==='periodo'){
+    ini=document.getElementById('ra-de').value; fim=document.getElementById('ra-ate').value;
+    if(!ini||!fim||ini>fim){ showToast('Informe um período válido: a data "De" não pode ser depois de "Até".',false); return; }
+    dias=[]; for(const c=new Date(ini+'T12:00:00'); assidISO(c)<=fim&&assidISO(c)<=hoje; c.setDate(c.getDate()+1)) dias.push(assidISO(c));
+    if(dias.length>93){ showToast('O período máximo é de 93 dias.',false); return; }
+    titulo='Relatório de Assiduidade'; periodo=`De ${dataLonga(ini)} a ${dataLonga(fim)}`;
+  } else if(REL_TIPO==='dia'){
+    ini=fim=document.getElementById('ra-ref').value||hoje; dias=ini<=hoje?[ini]:[];
+    titulo='Relatório diário de Assiduidade'; periodo=new Date(ini+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  } else {
+    ({ini,fim,dias}=assidPeriodo(REL_TIPO,document.getElementById('ra-ref').value||hoje));
+  }
+  if(!dias.length){ showToast('Esse período ainda não começou.',false); return; }
+  st.textContent=`Buscando ${dias.length} dia(s)...`;
+  let porDia;
+  try{ porDia=await assidBuscarDias(dias); }catch(e){ st.textContent=''; showToast('Erro: '+(e?.message||e),false); return; }
+  st.textContent='';
+  // até 7 dias: colunas largas em A4 retrato; acima disso: colunas compactas em A4 paisagem
+  const html=assidHtmlPeriodo(dias.length>7?'mes':'semana',ini,fim,dias,porDia,{titulo,periodo,semMarcPresenca:document.getElementById('ra-semmarc').checked});
+  const fr=document.getElementById('ra-frame');
+  document.getElementById('ra-vazio').style.display='none';
+  document.getElementById('ra-box').style.display='block';
+  fr.onload=()=>{ fr.style.height=(fr.contentDocument.documentElement.scrollHeight+24)+'px'; };
+  fr.srcdoc=html;
+  document.getElementById('ra-imprimir').disabled=false;
+};
+window.relAssidImprimir=()=>{ const fr=document.getElementById('ra-frame'); if(!fr.srcdoc)return; fr.contentWindow.focus(); fr.contentWindow.print(); };
+
 window.assidImprimirPeriodo=async tipo=>{
   const ref=document.getElementById('as-data').value||assidHojeStr();
   const {ini,fim,dias}=assidPeriodo(tipo,ref);
