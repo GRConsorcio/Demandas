@@ -945,6 +945,9 @@ const uOrd={critico:0,alto:1,medio:2,baixo:3};
 const uClr={critico:"#f87171",alto:"#fb923c",medio:"#fbbf24",baixo:"#4ade80"};
 const isAdmin=()=>!!cp?.is_admin;
 const podeAssiduidade=()=>!!(cp?.is_admin||cp?.pode_assiduidade);
+// Quem vê a aba "Relatórios de Assiduidade". Para liberar outra pessoa, acrescente o id dela (tabela demandas_usuarios).
+const RELATORIO_ASSID_IDS=['b6539546-f532-4cb2-aa52-5b0d9c80f653']; // Deivid Junio Dias
+const podeRelatorioAssid=()=>!!cp&&RELATORIO_ASSID_IDS.includes(cp.id);
 // (cp agora vem de demandas_usuarios/demandas_login — mesmo campo is_admin de antes)
 // Chamado "particular": visível só pra quem abriu e pro admin — igual DemandasGR.
 const canSeeTicket=t=>!t.privado||(t.solicitante_email||'').toLowerCase()===(cu?.email||'').toLowerCase()||isAdmin();
@@ -1053,7 +1056,7 @@ function showApp(){
   document.getElementById('nav-sec-admin').style.display = cp?.is_admin?'':'none';
   document.getElementById('nav-admin-btn').style.display = cp?.is_admin?'':'none';
   document.getElementById('nav-assid-btn').style.display = podeAssiduidade()?'':'none';
-  document.getElementById('nav-relassid-btn').style.display = podeAssiduidade()?'':'none';
+  document.getElementById('nav-relassid-btn').style.display = podeRelatorioAssid()?'':'none';
 }
 
 // ── TICKETS (realtime via Supabase, equivalente ao onSnapshot do Firestore) ──
@@ -2043,6 +2046,7 @@ function assidHtmlPeriodo(tipo,ini,fim,dias,porDia,opt={}){
 // ── ABA "Relatórios de Assiduidade": diário, semanal, mensal ou período livre ──
 let REL_TIPO='mes';
 function iniciarRelAssid(){
+  if(!podeRelatorioAssid()){ setView('dashboard',document.querySelector('.nav-item')); return; }
   const hoje=assidHojeStr();
   ['ra-ref','ra-de','ra-ate'].forEach(id=>{ const el=document.getElementById(id); el.max=hoje; if(!el.value) el.value=id==='ra-de'?hoje.slice(0,8)+'01':hoje; });
   relAssidTipo(REL_TIPO);
