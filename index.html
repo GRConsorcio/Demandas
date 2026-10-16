@@ -518,8 +518,8 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
             <button class="btn-cancel" onclick="assidMoverDia(1)">›</button>
             <button class="btn-cancel" onclick="assidHoje()">Hoje</button>
             <button class="btn-cancel" onclick="assidImprimir()" title="Imprimir o relatório do dia com todos os anexos">🖨 Relatório do dia</button>
-            <button class="btn-cancel" onclick="assidImprimirPeriodo('semana')" title="Semana (segunda a domingo) da data selecionada">🖨 Relatório da semana</button>
-            <button class="btn-cancel" onclick="assidImprimirPeriodo('mes')" title="Mês inteiro da data selecionada">🖨 Relatório do mês</button>
+            <button class="btn-cancel" id="as-sem-btn" style="display:none" onclick="assidImprimirPeriodo('semana')" title="Semana (segunda a domingo) da data selecionada">🖨 Relatório da semana</button>
+            <button class="btn-cancel" id="as-mes-btn" style="display:none" onclick="assidImprimirPeriodo('mes')" title="Mês inteiro da data selecionada">🖨 Relatório do mês</button>
             <button class="btn-cancel" id="as-cfg-btn" style="display:none" onclick="assidAbrirConfig()">⚙ Equipes e vendedores</button>
             <div class="as-sum" id="as-sum"></div>
           </div>
@@ -1900,6 +1900,8 @@ window.assidSalvarConfig=async()=>{
 };
 function iniciarAssiduidade(){
   document.getElementById('as-cfg-btn').style.display=isAdmin()?'':'none';
+  // relatórios da semana e do mês: mesma lista de quem vê a aba Relatórios de Assiduidade
+  ['as-sem-btn','as-mes-btn'].forEach(id=>document.getElementById(id).style.display=podeRelatorioAssid()?'':'none');
   const el=document.getElementById('as-data');
   if(!el.value) el.value=assidHojeStr();
   el.max=assidHojeStr();
@@ -2090,6 +2092,7 @@ window.relAssidGerar=async()=>{
 window.relAssidImprimir=()=>{ const fr=document.getElementById('ra-frame'); if(!fr.srcdoc)return; fr.contentWindow.focus(); fr.contentWindow.print(); };
 
 window.assidImprimirPeriodo=async tipo=>{
+  if(!podeRelatorioAssid())return;
   const ref=document.getElementById('as-data').value||assidHojeStr();
   const {ini,fim,dias}=assidPeriodo(tipo,ref);
   if(!dias.length){ showToast('Esse período ainda não começou.',false); return; }
