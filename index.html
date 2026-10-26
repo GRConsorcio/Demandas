@@ -459,7 +459,7 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
               <select class="fsel" id="filter-dept" onchange="renderTickets()"><option value="">Todos</option></select>
               <span class="flabel" style="margin-left:0.3rem">Categoria:</span>
               <select class="fsel" id="filter-cat" onchange="renderTickets()">
-                <option value="">Todas</option><option>Chip / WhatsApp</option><option>Caju</option><option>Campanhas</option><option>Convert +</option><option>Entrevistas</option><option>Sistema interno</option><option>Solicitação de serviço</option><option>Outro</option>
+                <option value="">Todas</option><option>Reunião</option><option>Chip / WhatsApp</option><option>Caju</option><option>Campanhas</option><option>Convert +</option><option>Entrevistas</option><option>Sistema interno</option><option>Solicitação de serviço</option><option>Outro</option>
               </select>
               <span class="flabel" style="margin-left:0.3rem">De:</span>
               <input type="datetime-local" class="fdate" id="filter-date-from" onchange="renderTickets()"/>
@@ -543,11 +543,20 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
     <div class="mhead"><div class="mhead-l"><span>🎯</span><h3>Novo Chamado</h3></div><button class="mclose" onclick="closeModal('modal-new')">✕</button></div>
     <div class="mbody">
       <div class="frow2c">
-        <div class="fg2"><label>Departamento *</label>
+        <div class="fg2" id="fg-dept"><label>Departamento *</label>
           <select id="new-dept"><option value="">Selecione...</option></select>
         </div>
         <div class="fg2"><label>Categoria *</label>
-          <select id="new-cat"><option value="">Selecione...</option><option>Chip / WhatsApp</option><option>Caju</option><option>Campanhas</option><option>Convert +</option><option>Entrevistas</option><option>Sistema interno</option><option>Solicitação de serviço</option><option>Outro</option></select>
+          <select id="new-cat" onchange="onCatChange()"><option value="">Selecione...</option><option>Reunião</option><option>Chip / WhatsApp</option><option>Caju</option><option>Campanhas</option><option>Convert +</option><option>Entrevistas</option><option>Sistema interno</option><option>Solicitação de serviço</option><option>Outro</option></select>
+        </div>
+      </div>
+      <div id="new-reuniao" style="display:none">
+        <div class="fg2"><label>Data e hora da reunião *</label><input type="datetime-local" id="new-reuniao-em"/></div>
+        <div class="fg2">
+          <label>Quem participa * <span id="new-part-count" style="color:var(--gold2);text-transform:none;letter-spacing:0"></span></label>
+          <input type="text" id="new-part-busca" placeholder="Buscar pessoa..." oninput="renderParticipantes()" style="margin-bottom:6px"/>
+          <div id="new-part-lista" style="max-height:170px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;background:var(--surface2);display:grid;grid-template-columns:1fr 1fr;gap:3px 12px"></div>
+          <div style="font-size:.72rem;color:var(--muted2);margin-top:4px">As pessoas marcadas veem um pop-up piscando com som. Você entra na reunião automaticamente.</div>
         </div>
       </div>
       <div class="fg2"><label>Título do chamado *</label><input type="text" id="new-title" placeholder="Descreva brevemente o problema..."/></div>
@@ -621,6 +630,8 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
           <div><div class="di-label">Solicitante</div><div class="di-val" id="vd-user">–</div></div>
           <div><div class="di-label">Depto. Solicitante</div><div class="di-val" id="vd-userdept">–</div></div>
           <div><div class="di-label">Responsável</div><div class="di-val" id="vd-resp">–</div></div>
+          <div id="vd-reu-w" style="display:none"><div class="di-label">Data e hora da reunião</div><div class="di-val" id="vd-reu">–</div></div>
+          <div id="vd-part-w" style="display:none;grid-column:1/-1"><div class="di-label">Participantes</div><div class="di-val" id="vd-part">–</div></div>
         </div>
         <div class="dbox-label">Descrição</div>
         <div class="dbox" id="vd-desc">–</div>
@@ -708,7 +719,7 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
   <div id="alerta-box" style="width:min(520px,100%);background:#141414;border:3px solid var(--red);border-radius:14px;padding:1.3rem 1.4rem;box-shadow:0 0 0 0 rgba(248,113,113,.7);animation:alertaPisca 1s infinite">
     <div id="alerta-topo" style="display:flex;align-items:center;gap:10px;margin-bottom:.7rem;animation:alertaTexto 1s infinite">
       <span style="font-size:1.6rem">🚨</span>
-      <div><div style="font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--red)">Novo chamado para o seu departamento</div><div id="alerta-num" style="font-size:.78rem;color:var(--muted2)"></div></div>
+      <div><div id="alerta-titulo" style="font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--red)">Novo chamado para o seu departamento</div><div id="alerta-num" style="font-size:.78rem;color:var(--muted2)"></div></div>
     </div>
     <div id="alerta-assunto" style="font-size:1.15rem;font-weight:700;color:#fff;margin-bottom:.5rem;word-break:break-word"></div>
     <div id="alerta-meta" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:.6rem"></div>
@@ -919,7 +930,13 @@ const isAdmin=()=>!!cp?.is_admin;
 const podeAssiduidade=()=>!!(cp?.is_admin||cp?.pode_assiduidade);
 // (cp agora vem de demandas_usuarios/demandas_login — mesmo campo is_admin de antes)
 // Chamado "particular": visível só pra quem abriu e pro admin — igual DemandasGR.
-const canSeeTicket=t=>!t.privado||(t.solicitante_email||'').toLowerCase()===(cu?.email||'').toLowerCase()||isAdmin();
+const ehParticipante=t=>!!cp&&Array.isArray(t.participantes)&&t.participantes.includes(cp.id);
+const canSeeTicket=t=>!t.privado||(t.solicitante_email||'').toLowerCase()===(cu?.email||'').toLowerCase()||isAdmin()||ehParticipante(t);
+// Chamado da categoria "Reunião": em vez de um departamento, marca pessoas (participantes) + data/hora.
+const CAT_REUNIAO='Reunião';
+const ehReuniao=t=>t?.categoria===CAT_REUNIAO;
+let PESSOAS=[],PART_SEL=new Set();
+const fmtReuniao=ts=>{if(!ts)return'–';const d=new Date(ts);return d.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})+' às '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});};
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 window.showToast=(msg,ok=true)=>{
@@ -975,6 +992,7 @@ async function iniciarSessao(row){
   USUARIO_OPERACIONAL = (usuarioOp && usuarioOp.ativo) ? usuarioOp : null;
   document.getElementById("login-loading").classList.remove("show");
   await carregarSetores();
+  { const { data:ps } = await sbCrm.from('demandas_usuarios_publica').select('id,nome,setor_id').eq('ativo',true).order('nome'); PESSOAS=ps||[]; }
   { const { data:ms } = await sbCrm.rpc('demandas_meus_setores',{p_caller_id:row.id}); MEUS_SETORES=new Set((ms||[]).map(x=>x.setor_id)); }
   showApp();
   loadTickets();
@@ -1040,7 +1058,12 @@ function loadTickets(){
         const mine=(t.solicitante_email||'').toLowerCase()===(cu?.email||'').toLowerCase();
         // Responsável pelo departamento de destino: pop-up piscando + som repetido até fechar.
         // Quem abriu o próprio chamado não é alertado (só recebe o aviso simples).
-        if(!mine&&t.setor_destino_id&&MEUS_SETORES.has(t.setor_destino_id)){ mostrarAlertaChamado(t); sendBrowserNotif(t,false); }
+        // Reunião: só quem foi marcado é alertado (o departamento é só o de quem marcou, não deve receber sirene).
+        if(ehReuniao(t)){
+          if(!mine&&ehParticipante(t)){ mostrarAlertaChamado(t); sendBrowserNotif(t,false); }
+          else{ showNotifBanner(t,mine);sendBrowserNotif(t,mine);playNotifSound(); }
+        }
+        else if(!mine&&t.setor_destino_id&&MEUS_SETORES.has(t.setor_destino_id)){ mostrarAlertaChamado(t); sendBrowserNotif(t,false); }
         else{ showNotifBanner(t,mine);sendBrowserNotif(t,mine);playNotifSound(); }
       }
       // Demanda concluída/cancelada por qualquer pessoa: para a sirene e tira o pop-up dela na hora
@@ -1072,12 +1095,12 @@ function updateStats(){
 function updateBadges(){
   document.getElementById("badge-todos").textContent=tickets.filter(t=>canSeeTicket(t)&&t.status!=="cancelada").length;
   const mineEmail=(cu?.email||'').toLowerCase();
-  document.getElementById("badge-meus").textContent=tickets.filter(t=>(t.solicitante_email||'').toLowerCase()===mineEmail&&t.status!=="cancelada"&&t.status!=="concluida").length;
+  document.getElementById("badge-meus").textContent=tickets.filter(t=>((t.solicitante_email||'').toLowerCase()===mineEmail||ehParticipante(t))&&t.status!=="cancelada"&&t.status!=="concluida").length;
 }
 
 // ── SLA / PISCAR POR URGÊNCIA — mesma regra do DemandasGR ───────────────────
 function checkSlaState(t){
-  if(t.status==="concluida"||t.status==="cancelada")return{overdue:false};
+  if(t.status==="concluida"||t.status==="cancelada"||ehReuniao(t))return{overdue:false};
   if(!t.criado_em)return{overdue:false};
   const deadline=new Date(t.criado_em).getTime()+(t.prazo_horas||48)*3600000;
   const now=Date.now();
@@ -1099,7 +1122,7 @@ setInterval(refreshSlaBlink,30000);
 
 window.renderTickets=()=>{
   const mineEmail=(cu?.email||'').toLowerCase();
-  let src=cView==="meus"?tickets.filter(t=>(t.solicitante_email||'').toLowerCase()===mineEmail):tickets.filter(canSeeTicket);
+  let src=cView==="meus"?tickets.filter(t=>(t.solicitante_email||'').toLowerCase()===mineEmail||ehParticipante(t)):tickets.filter(canSeeTicket);
   if(cFilter==="nao_respondido")src=src.filter(t=>!t.ultima_resposta_em);
   else if(cFilter!=="todos")src=src.filter(t=>t.status===cFilter);
   const dept=document.getElementById("filter-dept")?.value;
@@ -1121,8 +1144,8 @@ window.renderTickets=()=>{
     const urg=PRIORIDADE_TO_URG[t.prioridade]||'baixo';
     return `<tr id="tr-${t.id}"${checkSlaState(t).overdue?' class="tt-overdue"':''}>
     <td><span class="tid">${esc(numFmt(t.numero))}</span></td>
-    <td><div class="t-title">${t.privado?'🔒 ':''}${esc(t.assunto)}</div><div class="t-meta">${esc(t.categoria||"")} · ${esc(t.solicitante_nome_externo||"")}</div></td>
-    <td style="font-size:0.78rem;color:var(--muted2)">${esc(t.destino?.nome||"")}</td>
+    <td><div class="t-title">${t.privado?'🔒 ':''}${esc(t.assunto)}</div><div class="t-meta">${esc(t.categoria||"")} · ${esc(t.solicitante_nome_externo||"")}${ehReuniao(t)?` · 📅 ${esc(fmtReuniao(t.reuniao_em))}`:''}</div></td>
+    <td style="font-size:0.78rem;color:var(--muted2)">${ehReuniao(t)?`👥 ${(t.participantes||[]).length+1} pessoas`:esc(t.destino?.nome||"")}</td>
     <td><span class="badge badge-${urg}">${cap(urg)}</span></td>
     <td><span class="badge badge-${t.status}">${esc(STATUS_LABEL[t.status]||t.status)}</span></td>
     <td style="font-size:0.73rem;font-family:'JetBrains Mono',monospace;color:var(--muted)">${fmt(t.criado_em)}</td>
@@ -1156,9 +1179,35 @@ window.closeModal=id=>{
   if(id==="modal-view"&&repliesChannel){sbCrm.removeChannel(repliesChannel);repliesChannel=null;}
 };
 
+window.onCatChange=()=>{
+  const reu=document.getElementById("new-cat").value===CAT_REUNIAO;
+  document.getElementById("new-reuniao").style.display=reu?"block":"none";
+  document.getElementById("fg-dept").style.display=reu?"none":"";
+  if(reu)renderParticipantes();
+};
+window.renderParticipantes=()=>{
+  const q=(document.getElementById("new-part-busca").value||"").toLowerCase();
+  const lista=PESSOAS.filter(p=>p.id!==cp?.id&&(p.nome||"").toLowerCase().includes(q));
+  document.getElementById("new-part-lista").innerHTML=lista.length?lista.map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer;text-transform:none;letter-spacing:0;margin:0;color:var(--text)"><input type="checkbox" ${PART_SEL.has(p.id)?'checked':''} onchange="togglePart('${p.id}',this.checked)" style="width:15px;height:15px;accent-color:var(--gold);flex-shrink:0"/>${esc(p.nome)}</label>`).join(""):`<div style="grid-column:1/-1;font-size:.8rem;color:var(--muted2)">Ninguém encontrado.</div>`;
+  document.getElementById("new-part-count").textContent=PART_SEL.size?`— ${PART_SEL.size} marcada${PART_SEL.size>1?'s':''}`:"";
+};
+window.togglePart=(id,on)=>{on?PART_SEL.add(id):PART_SEL.delete(id);renderParticipantes();};
+
 window.submitTicket=async()=>{
-  const setor_destino_id=document.getElementById("new-dept").value;
   const categoria=document.getElementById("new-cat").value;
+  const reuniao=categoria===CAT_REUNIAO;
+  let setor_destino_id=document.getElementById("new-dept").value;
+  let participantes=[],reuniao_em=null;
+  if(reuniao){
+    participantes=[...PART_SEL];
+    const dtv=document.getElementById("new-reuniao-em").value;
+    if(!dtv){showToast("Informe a data e a hora da reunião.",false);return;}
+    if(!participantes.length){showToast("Marque pelo menos uma pessoa.",false);return;}
+    reuniao_em=new Date(dtv).toISOString();
+    // setor_destino_id é obrigatório no banco: usa o departamento de quem marcou (ou o de um convidado).
+    setor_destino_id=cp?.setor_id||PESSOAS.find(p=>participantes.includes(p.id)&&p.setor_id)?.setor_id||"";
+    if(!setor_destino_id){showToast("Seu usuário não tem departamento definido — peça ao admin pra cadastrar.",false);return;}
+  }
   const assunto=document.getElementById("new-title").value.trim();
   const urgency=document.querySelector("input[name='urg']:checked")?.value||"baixo";
   const descricao=document.getElementById("new-desc").value.trim();
@@ -1168,17 +1217,18 @@ window.submitTicket=async()=>{
   const prioridade=URG_TO_PRIORIDADE[urgency];
   try{
     const { data:novoTicket, error } = await Q.from('solicitacoes').insert({
-      setor_destino_id, setor_origem_id: cp?.setor_id||null, categoria, assunto, descricao, extra, privado,
+      setor_destino_id, setor_origem_id: cp?.setor_id||null, categoria, assunto, descricao, extra, privado, participantes, reuniao_em,
       prioridade, prazo_horas: SLA_HOURS[urgency],
       solicitante_id: USUARIO_OPERACIONAL?.id||null,
       solicitante_nome_externo: cp?.nome||cu.email, solicitante_email: cu.email,
       status:'aberta'
     }).select().single();
     if(error){ showToast("Erro ao abrir chamado: "+error.message,false); return; }
-    await autoAssumirSeSetorTemUmaPessoa(novoTicket, setor_destino_id);
-    closeModal("modal-new");showToast(privado?"Chamado particular aberto — só você e o admin veem.":"Chamado aberto com sucesso!");
-    ["new-title","new-desc","new-extra"].forEach(i=>document.getElementById(i).value="");
-    document.getElementById("new-dept").value="";document.getElementById("new-cat").value="";document.getElementById("u-b").checked=true;
+    if(!reuniao) await autoAssumirSeSetorTemUmaPessoa(novoTicket, setor_destino_id);
+    closeModal("modal-new");showToast(reuniao?`Reunião marcada com ${participantes.length} pessoa${participantes.length>1?'s':''}!`:privado?"Chamado particular aberto — só você e o admin veem.":"Chamado aberto com sucesso!");
+    ["new-title","new-desc","new-extra","new-reuniao-em","new-part-busca"].forEach(i=>document.getElementById(i).value="");
+    PART_SEL.clear();
+    document.getElementById("new-dept").value="";document.getElementById("new-cat").value="";document.getElementById("u-b").checked=true;onCatChange();
     document.getElementById("new-private").checked=false;
   }catch(e){showToast("Erro ao abrir chamado.",false);}
 };
@@ -1201,6 +1251,14 @@ window.viewTicket=id=>{
   document.getElementById("vd-desc").textContent=t.descricao||"Sem descrição adicional.";
   document.getElementById("vd-extra").textContent=t.extra||"–";
   document.getElementById("vd-extra-w").style.display=t.extra?"block":"none";
+  const reu=ehReuniao(t);
+  document.getElementById("vd-reu-w").style.display=reu?"block":"none";
+  document.getElementById("vd-part-w").style.display=reu?"block":"none";
+  if(reu){
+    document.getElementById("vd-reu").textContent=fmtReuniao(t.reuniao_em);
+    const nomes=[t.solicitante_nome_externo?`${t.solicitante_nome_externo} (organiza)`:null,...(t.participantes||[]).map(id=>PESSOAS.find(p=>p.id===id)?.nome||"(usuário removido)")].filter(Boolean);
+    document.getElementById("vd-part").textContent=nomes.join(", ");
+  }
 
   const createdMs=t.criado_em?new Date(t.criado_em).getTime():null;
   const ageInDays=createdMs?Math.floor((Date.now()-createdMs)/86400000):null;
@@ -1578,7 +1636,9 @@ function proximoAlertaChamado(){
   const setor=SETORES.find(s=>s.id===t.setor_destino_id)?.nome||'';
   const origem=SETORES.find(s=>s.id===t.setor_origem_id)?.nome||'';
   const urg=PRIORIDADE_TO_URG[t.prioridade]||'medio';
-  document.getElementById('alerta-num').textContent=numFmt(t.numero)+(setor?' · '+setor:'')+(_alertaFila.length?` · +${_alertaFila.length} na fila`:'');
+  const reu=ehReuniao(t);
+  document.getElementById('alerta-titulo').textContent=reu?'Você foi convidado para uma reunião':'Novo chamado para o seu departamento';
+  document.getElementById('alerta-num').textContent=numFmt(t.numero)+(reu?' · '+fmtReuniao(t.reuniao_em):setor?' · '+setor:'')+(_alertaFila.length?` · +${_alertaFila.length} na fila`:'');
   document.getElementById('alerta-assunto').textContent=t.assunto||'(sem assunto)';
   document.getElementById('alerta-meta').innerHTML=
     `<span class="badge badge-${urg}">${cap(urg)}</span>`+
@@ -1589,7 +1649,7 @@ function proximoAlertaChamado(){
   document.getElementById('alerta-chamado').style.display='flex';
   clearInterval(_alertaTimer); tocarSirene(); _alertaTimer=setInterval(tocarSirene,2600);
   // título da aba piscando (chama atenção mesmo com o Demandas em segundo plano)
-  if(_alertaTitulo===null){ _alertaTitulo=document.title; let on=false; window._alertaTitleTimer=setInterval(()=>{ on=!on; document.title=on?'🚨 NOVO CHAMADO!':_alertaTitulo; },900); }
+  if(_alertaTitulo===null){ _alertaTitulo=document.title; let on=false; window._alertaTitleTimer=setInterval(()=>{ on=!on; document.title=on?(reu?'📅 REUNIÃO!':'🚨 NOVO CHAMADO!'):_alertaTitulo; },900); }
 }
 window.fecharAlertaChamado=(fimDaFila)=>{
   if(fimDaFila!==true&&_alertaFila.length){ proximoAlertaChamado(); return; }
