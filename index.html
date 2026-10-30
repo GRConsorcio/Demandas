@@ -160,6 +160,11 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
 .as-bar{display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-bottom:0.6rem}
 .as-bar input[type=date]{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:0.45rem 0.7rem;font-family:"Inter",sans-serif;font-size:0.875rem;color-scheme:dark}
 .as-sum{margin-left:auto;font-size:0.875rem;color:var(--muted2);display:flex;gap:0.9rem}
+.as-modo{display:flex;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.as-modo .fbtn{border:0;border-radius:0;padding:0.45rem 0.95rem;font-size:0.875rem}
+.as-modo .fbtn+.fbtn{border-left:1px solid var(--border)}
+.as-colab{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:0.45rem 0.7rem;font-family:"Inter",sans-serif;font-size:0.875rem;max-width:260px;color-scheme:dark}
+.as-info{display:flex;flex-wrap:wrap;align-items:center;gap:0.6rem;margin-bottom:0.6rem;font-size:0.875rem;color:var(--muted2)}
 .as-sum b.g{color:var(--green)}.as-sum b.r{color:var(--red)}
 .loading{display:flex;align-items:center;justify-content:center;padding:2.5rem;gap:10px;color:var(--muted);font-size:0.875rem;}
 .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0;}
@@ -513,17 +518,22 @@ body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);min-h
 
         <div id="view-assiduidade" style="display:none">
           <div class="as-bar">
-            <button class="btn-cancel" onclick="assidMoverDia(-1)">‹</button>
-            <input type="date" id="as-data" onchange="carregarAssiduidade()"/>
-            <button class="btn-cancel" onclick="assidMoverDia(1)">›</button>
+            <div class="as-modo" id="as-modo">
+              <button class="fbtn active" data-m="dia" onclick="assidModo('dia')">Dia</button>
+              <button class="fbtn" data-m="semana" onclick="assidModo('semana')" title="Segunda a domingo da data escolhida">Semana</button>
+              <button class="fbtn" data-m="mes" onclick="assidModo('mes')" title="Mês inteiro da data escolhida">Mês</button>
+            </div>
+            <button class="btn-cancel" onclick="assidMover(-1)" title="Anterior">‹</button>
+            <input type="date" id="as-data" onchange="assidAtualizar()"/>
+            <button class="btn-cancel" onclick="assidMover(1)" title="Próximo">›</button>
             <button class="btn-cancel" onclick="assidHoje()">Hoje</button>
-            <button class="btn-cancel" onclick="assidImprimir()" title="Imprimir o relatório do dia com todos os anexos">🖨 Relatório do dia</button>
-            <button class="btn-cancel" id="as-sem-btn" style="display:none" onclick="assidImprimirPeriodo('semana')" title="Semana (segunda a domingo) da data selecionada">🖨 Relatório da semana</button>
-            <button class="btn-cancel" id="as-mes-btn" style="display:none" onclick="assidImprimirPeriodo('mes')" title="Mês inteiro da data selecionada">🖨 Relatório do mês</button>
+            <select id="as-colab" class="as-colab" onchange="assidAtualizar()" aria-label="Filtrar por colaborador"><option value="">Todos os colaboradores</option></select>
+            <button class="btn-new" onclick="assidGerarRelatorio()" title="Imprime ou salva em PDF o que está filtrado">🖨 Gerar relatório</button>
             <button class="btn-cancel" id="as-cfg-btn" style="display:none" onclick="assidAbrirConfig()">⚙ Equipes e vendedores</button>
-            <div class="as-sum" id="as-sum"></div>
           </div>
+          <div class="as-info"><span id="as-periodo-txt"></span><div class="as-sum" id="as-sum"></div></div>
           <div id="as-lista"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
+          <div id="as-periodo-box" style="display:none;background:#fff;border-radius:var(--radius-lg);overflow:hidden"><iframe id="as-periodo-frame" title="Assiduidade do período" style="width:100%;min-height:360px;border:0;display:block"></iframe></div>
         </div>
         <div id="view-relassid" style="display:none">
           <div class="filters-box">
@@ -1960,24 +1970,25 @@ window.assidSalvarConfig=async()=>{
 };
 function iniciarAssiduidade(){
   document.getElementById('as-cfg-btn').style.display=isAdmin()?'':'none';
-  // relatórios da semana e do mês: mesma lista de quem vê a aba Relatórios de Assiduidade
-  ['as-sem-btn','as-mes-btn'].forEach(id=>document.getElementById(id).style.display=podeRelatorioAssid()?'':'none');
+  // Semana e Mês: mesma lista de quem vê a aba Relatórios de Assiduidade (RELATORIO_ASSID_IDS)
+  document.querySelectorAll('#as-modo .fbtn[data-m="semana"],#as-modo .fbtn[data-m="mes"]').forEach(b=>b.style.display=podeRelatorioAssid()?'':'none');
   const el=document.getElementById('as-data');
   if(!el.value) el.value=assidHojeStr();
   el.max=assidHojeStr();
-  carregarAssiduidade();
+  assidModo(ASSID_MODO);
 }
 // Relatório do dia para imprimir/salvar em PDF: resumo, tabela por equipe e cada anexo (imagens aparecem inteiras;
 // PDF/Word aparecem como nome + link, porque o navegador não imprime documento dentro de documento).
 window.assidImprimir=async()=>{
+  const LISTA=assidFiltrar(ASSID), NOME_COLAB=assidColabNome();
   const dataStr=document.getElementById('as-data').value;
-  if(!dataStr||!ASSID.length){showToast('Nada para imprimir nesse dia.',false);return;}
+  if(!dataStr||!LISTA.length){showToast('Nada para imprimir nesse dia.',false);return;}
   const escH=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const isImg=a=>/\.(png|jpe?g|gif|webp|bmp)(\?.*)?$/i.test(a.name||'')||/\.(png|jpe?g|gif|webp|bmp)(\?.*)?$/i.test(a.url||'');
   const dataFmt=new Date(dataStr+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
-  const pres=ASSID.filter(r=>r.status==='presente').length, falt=ASSID.filter(r=>r.status==='faltou').length;
+  const pres=LISTA.filter(r=>r.status==='presente').length, falt=LISTA.filter(r=>r.status==='faltou').length;
   let eq=null,corpo='';
-  ASSID.forEach(r=>{
+  LISTA.forEach(r=>{
     if(r.equipe!==eq){ if(eq!==null) corpo+='</tbody></table>'; eq=r.equipe; corpo+=`<h2>Equipe ${escH(eq||'—')}</h2><table><thead><tr><th style="width:26%">Vendedor</th><th style="width:13%">Situação</th><th style="width:16%">Confirmado</th><th>Observação e anexos</th></tr></thead><tbody>`; }
     const st=r.status==='presente'?'<b class="ok">✔ Veio</b>':r.status==='faltou'?'<b class="no">✘ Faltou</b>':'<span class="nm">Sem marcação</span>';
     const anx=(r.anexos||[]).map(a=>isImg(a)
@@ -1996,8 +2007,8 @@ window.assidImprimir=async()=>{
   .obs{margin-bottom:6px;font-style:italic}.anx{margin:4px 0;page-break-inside:avoid}.anx img{max-width:100%;max-height:320px;border:1px solid #ddd;display:block}
   .doc{padding:6px;border:1px dashed #aaa}.rod{margin-top:18px;color:#777;font-size:10px}
   @media print{body{margin:10mm}}</style></head><body>
-  <h1>Relatório de Assiduidade</h1><div class="sub">${escH(dataFmt)}</div>
-  <div class="res"><span><b class="ok">${pres}</b> vieram</span><span><b class="no">${falt}</b> faltaram</span><span><b>${ASSID.length-pres-falt}</b> sem marcação</span><span><b>${ASSID.length}</b> no total</span></div>
+  <h1>Relatório de Assiduidade${NOME_COLAB?' — '+escH(NOME_COLAB):''}</h1><div class="sub">${escH(dataFmt)}</div>
+  <div class="res"><span><b class="ok">${pres}</b> vieram</span><span><b class="no">${falt}</b> faltaram</span><span><b>${LISTA.length-pres-falt}</b> sem marcação</span><span><b>${LISTA.length}</b> no total</span></div>
   ${corpo}<div class="rod">Emitido em ${escH(new Date().toLocaleString('pt-BR'))} por ${escH(cp?.nome||'')} — Demandas GR</div></body></html>`;
   assidAbrirImpressao(html);
 };
@@ -2044,7 +2055,7 @@ function assidHtmlPeriodo(tipo,ini,fim,dias,porDia,opt={}){
   const SEM=['dom','seg','ter','qua','qui','sex','sáb'];
   const dt=s=>new Date(s+'T12:00:00');
   const ddmm=s=>dt(s).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-  const comExpediente=new Set(dias.filter(d=>(porDia[d]||[]).some(r=>r.status)));
+  const comExpediente=opt.expediente?new Set(opt.expediente):new Set(dias.filter(d=>(porDia[d]||[]).some(r=>r.status)));
   // junta o mesmo vendedor de todos os dias (nome e equipe do dia mais recente)
   const vend=new Map();
   dias.forEach(d=>(porDia[d]||[]).forEach(r=>{
@@ -2161,28 +2172,92 @@ window.assidImprimirPeriodo=async tipo=>{
   try{ porDia=await assidBuscarDias(dias); }catch(e){ showToast('Erro: '+(e?.message||e),false); return; }
   assidAbrirImpressao(assidHtmlPeriodo(tipo,ini,fim,dias,porDia));
 };
-window.assidHoje=()=>{document.getElementById('as-data').value=assidHojeStr();carregarAssiduidade();};
-window.assidMoverDia=n=>{
-  const el=document.getElementById('as-data');
-  const d=new Date((el.value||assidHojeStr())+'T12:00:00'); d.setDate(d.getDate()+n);
-  const v=d.toISOString().slice(0,10); if(v>assidHojeStr())return;
-  el.value=v; carregarAssiduidade();
+// ── Filtro unificado: Dia | Semana | Mês + colaborador + um botão "Gerar relatório" ──
+// Dia = lista de marcação de sempre. Semana/Mês = grade do período na tela (busca dia a dia, 6 por vez).
+let ASSID_MODO='dia', ASSID_PER=null, ASSID_PER_TOKEN=0;   // ASSID_PER = {chave,ini,fim,dias,porDia} (cache do período)
+const assidColab=()=>document.getElementById('as-colab')?.value||'';
+const assidColabNome=()=>{ const s=document.getElementById('as-colab'); return s&&s.value?(s.selectedOptions[0]?.dataset.nome||''):''; };
+const assidFiltrar=lista=>{ const c=assidColab(); return c?lista.filter(r=>r.vendedor_id===c):lista; };
+function assidPreencherColab(listas){
+  const sel=document.getElementById('as-colab'), atual=sel.value, m=new Map();
+  listas.forEach(L=>(L||[]).forEach(r=>{ if(!m.has(r.vendedor_id)) m.set(r.vendedor_id,{nome:r.nome,equipe:r.equipe}); }));
+  const ops=[...m.entries()].sort((a,b)=>String(a[1].nome).localeCompare(String(b[1].nome),'pt-BR'));
+  sel.innerHTML='<option value="">Todos os colaboradores</option>'+ops.map(([id,v])=>`<option value="${esc(id)}" data-nome="${esc(v.nome)}">${esc(v.nome)}${v.equipe?' · '+esc(v.equipe):''}</option>`).join('');
+  if(atual&&m.has(atual)) sel.value=atual;   // mantém a pessoa escolhida se ela existe no novo dia/período
+}
+window.assidModo=m=>{
+  if(m!=='dia'&&!podeRelatorioAssid()) m='dia';
+  ASSID_MODO=m;
+  document.querySelectorAll('#as-modo .fbtn').forEach(b=>b.classList.toggle('active',b.dataset.m===m));
+  assidAtualizar();
+};
+window.assidAtualizar=()=>ASSID_MODO==='dia'?carregarAssiduidade():carregarAssidPeriodo();
+window.assidMover=n=>{
+  const el=document.getElementById('as-data'), hoje=assidHojeStr();
+  const d=new Date((el.value||hoje)+'T12:00:00');
+  if(ASSID_MODO==='mes'){ d.setDate(1); d.setMonth(d.getMonth()+n); }
+  else d.setDate(d.getDate()+n*(ASSID_MODO==='semana'?7:1));
+  let v=assidISO(d);
+  if(v>hoje){ if(ASSID_MODO==='dia') return; v=hoje; }   // semana/mês: avança até o período atual
+  el.value=v; assidAtualizar();
+};
+window.assidHoje=()=>{document.getElementById('as-data').value=assidHojeStr();assidAtualizar();};
+window.assidMoverDia=n=>assidMover(n);
+async function carregarAssidPeriodo(){
+  const ref=document.getElementById('as-data').value||assidHojeStr();
+  const {ini,fim,dias}=assidPeriodo(ASSID_MODO,ref);
+  const lista=document.getElementById('as-lista'), box=document.getElementById('as-periodo-box'), fr=document.getElementById('as-periodo-frame');
+  const txt=document.getElementById('as-periodo-txt'), sum=document.getElementById('as-sum');
+  const ddmm=s=>new Date(s+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  lista.style.display='none';
+  const chave=ASSID_MODO+':'+ini, token=++ASSID_PER_TOKEN;
+  if(!ASSID_PER||ASSID_PER.chave!==chave){
+    box.style.display='none'; sum.innerHTML='';
+    if(!dias.length){ txt.textContent='Esse período ainda não começou.'; return; }
+    txt.textContent=`Carregando ${dias.length} dia(s)...`;
+    let porDia; try{ porDia=await assidBuscarDias(dias); }catch(e){ txt.textContent=''; showToast('Erro: '+(e?.message||e),false); return; }
+    if(token!==ASSID_PER_TOKEN) return;   // a pessoa já trocou de período
+    ASSID_PER={chave,ini,fim,dias,porDia};
+    assidPreencherColab(dias.map(d=>porDia[d]));
+  }
+  const P=ASSID_PER, nome=assidColabNome();
+  const expediente=P.dias.filter(d=>(P.porDia[d]||[]).some(r=>r.status));   // calculado com a equipe toda, não só a pessoa filtrada
+  const porDia=Object.fromEntries(P.dias.map(d=>[d,assidFiltrar(P.porDia[d]||[])]));
+  let pr=0,fa=0,sm=0; expediente.forEach(d=>porDia[d].forEach(r=>r.status==='presente'?pr++:r.status==='faltou'?fa++:sm++));
+  sum.innerHTML=`<span><b class="g">${pr}</b> presenças</span><span><b class="r">${fa}</b> faltas</span><span><b>${sm}</b> sem marcar</span>`;
+  const rotulo=ASSID_MODO==='semana'?`Semana de ${ddmm(P.ini)} a ${ddmm(P.fim)}`:new Date(P.ini+'T12:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  txt.textContent=rotulo.charAt(0).toUpperCase()+rotulo.slice(1)+(P.dias[P.dias.length-1]<P.fim?' · até hoje':'')+(nome?' · '+nome:'');
+  const titulo=(ASSID_MODO==='semana'?'Relatório semanal de Assiduidade':'Relatório mensal de Assiduidade')+(nome?' — '+nome:'');
+  fr.onload=()=>{ try{ fr.style.height=(fr.contentDocument.documentElement.scrollHeight+24)+'px'; }catch(e){} };
+  fr.srcdoc=assidHtmlPeriodo(P.dias.length>7?'mes':'semana',P.ini,P.fim,P.dias,porDia,{titulo,expediente});
+  box.style.display='block';
+}
+// Um botão só: no Dia imprime o relatório do dia (com anexos); em Semana/Mês imprime o período que está na tela.
+window.assidGerarRelatorio=()=>{
+  if(ASSID_MODO==='dia') return assidImprimir();
+  const fr=document.getElementById('as-periodo-frame');
+  if(!fr.srcdoc||document.getElementById('as-periodo-box').style.display==='none'){ showToast('Aguarde o período carregar.',false); return; }
+  fr.contentWindow.focus(); fr.contentWindow.print();
 };
 window.carregarAssiduidade=async()=>{
+  if(ASSID_MODO!=='dia'){ ASSID_PER=null; return carregarAssidPeriodo(); }   // chamado depois de mudar equipes/vendedores
   const data=document.getElementById('as-data').value;
   if(!data)return;
+  document.getElementById('as-lista').style.display=''; document.getElementById('as-periodo-box').style.display='none';
+  document.getElementById('as-periodo-txt').textContent=new Date(data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
   const { data:rows, error } = await sbCrm.rpc('assiduidade_listar',{p_caller_id:cp.id,p_data:data});
   if(error){ document.getElementById('as-lista').innerHTML=`<div class="loading" style="color:var(--red)">${esc(error.message)}</div>`; return; }
-  ASSID=rows||[]; renderAssiduidade();
+  ASSID=rows||[]; assidPreencherColab([ASSID]); renderAssiduidade();
 };
 const ICO_V='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
 const ICO_X='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 function renderAssiduidade(){
-  const pres=ASSID.filter(r=>r.status==='presente').length, falt=ASSID.filter(r=>r.status==='faltou').length;
-  document.getElementById('as-sum').innerHTML=`<span><b class="g">${pres}</b> vieram</span><span><b class="r">${falt}</b> faltaram</span><span><b>${ASSID.length-pres-falt}</b> sem marcar</span>`;
+  const L=assidFiltrar(ASSID);   // filtro de colaborador
+  const pres=L.filter(r=>r.status==='presente').length, falt=L.filter(r=>r.status==='faltou').length;
+  document.getElementById('as-sum').innerHTML=`<span><b class="g">${pres}</b> vieram</span><span><b class="r">${falt}</b> faltaram</span><span><b>${L.length-pres-falt}</b> sem marcar</span>`;
   let eq=null,h='';
-  ASSID.forEach(r=>{
-    if(r.equipe!==eq){ eq=r.equipe; const n=ASSID.filter(x=>x.equipe===eq).length; h+=`<div class="as-eq">Equipe <b>${esc(eq||'—')}</b> · ${n}</div>`; }
+  L.forEach(r=>{
+    if(r.equipe!==eq){ eq=r.equipe; const n=L.filter(x=>x.equipe===eq).length; h+=`<div class="as-eq">Equipe <b>${esc(eq||'—')}</b> · ${n}</div>`; }
     const nAn=(r.anexos||[]).length;
     const cls=r.status==='presente'?'ok':r.status==='faltou'?'no':'';
     h+=`<div class="as-row ${cls}">
